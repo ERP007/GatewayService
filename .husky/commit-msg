@@ -1,0 +1,17 @@
+#!/bin/sh
+commit_msg_file="$1"
+commit_msg="$(head -n 1 "$commit_msg_file")"
+pattern='^(feature|fix|docs|ui|refactoring|setting|ci|build)\([A-Z]+-[0-9]+\): .+ \(#[0-9]+\)$'
+if ! echo "$commit_msg" | grep -Eq "$pattern"; then
+  echo "❌ 커밋 메시지 컨벤션이 올바르지 않습니다."
+  echo ""
+  echo "형식:"
+  echo "  {라벨}({JiraKey}): {내용} ({#이슈번호})"
+  echo ""
+  echo "예시:"
+  echo "  feature(ERP-008): 대시보드 화면 API 연결 (#17)"
+  echo ""
+  echo "허용 라벨:"
+  echo "  feature, fix, docs, ui, refactoring, setting, build, ci"
+  exit 1
+fi
