@@ -1,4 +1,7 @@
 HELP.md
+.env
+.env.*
+!.env.example
 .gradle
 build/
 !gradle/wrapper/gradle-wrapper.jar
@@ -38,3 +41,6 @@ out/
 
 ## node modules
 /node_modules
+
+AGENTS.md
+CLAUDE.md
