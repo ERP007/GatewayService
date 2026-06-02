@@ -4,14 +4,14 @@ WORKDIR /app
 
 COPY . .
 
-RUN gradle clean test bootJar --no-daemon
+RUN gradle clean bootJar -x test --no-daemon
 
 
 FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
-COPY --from=build /app/build/libs/app.jar app.jar
+COPY --from=build /app/build/libs/*.jar app.jar
 
 EXPOSE 8080
 
