@@ -1,0 +1,100 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        SERVICE_NAME = 'gateway-service'
+        TAG_KEY = 'GATEWAY_SERVICE_TAG'
+        IMAGE_NAME = 'ghcr.io/erp007/gateway-service'
+        INFRA_REPO = 'https://github.com/ERP007/Infra.git'
+        GIT_COMMITTER_NAME = 'erp007-jenkins'
+        GIT_COMMITTER_EMAIL = 'jenkins@erp007.xyz'
+    }
+
+    stages {
+        stage('Prepare') {
+            steps {
+                script {
+                    env.IMAGE_TAG = "sha-${env.GIT_COMMIT.take(12)}"
+                }
+            }
+        }
+
+        stage('Test and package') {
+            steps {
+                sh 'docker build --target build -t ${IMAGE_NAME}:build-${IMAGE_TAG} .'
+            }
+        }
+
+        stage('Build image') {
+            steps {
+                sh 'docker build -t ${IMAGE_NAME}:${IMAGE_TAG} -t ${IMAGE_NAME}:main .'
+            }
+        }
+
+        stage('Push image') {
+            when { branch 'main' }
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'ghcr-kt-packages', usernameVariable: 'GHCR_USERNAME', passwordVariable: 'GHCR_TOKEN')]) {
+                    sh '''
+                        set -eu
+                        printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+                        docker push "${IMAGE_NAME}:${IMAGE_TAG}"
+                        docker push "${IMAGE_NAME}:main"
+                    '''
+                }
+            }
+        }
+
+        stage('Update infra image tag') {
+            when { branch 'main' }
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'github-kt-jenkins-pat', usernameVariable: 'GITHUB_USERNAME', passwordVariable: 'GITHUB_TOKEN')]) {
+                    sh '''
+                        set -eu
+                        rm -rf .ci-infra
+
+                        auth_header="$(printf '%s:%s' "$GITHUB_USERNAME" "$GITHUB_TOKEN" | base64 | tr -d '\\n')"
+                        git -c "http.extraHeader=Authorization: Basic ${auth_header}" clone "$INFRA_REPO" .ci-infra
+
+                        cd .ci-infra
+                        git config user.name "$GIT_COMMITTER_NAME"
+                        git config user.email "$GIT_COMMITTER_EMAIL"
+
+                        tmp_file="$(mktemp)"
+
+                        if grep -q "^${TAG_KEY}=" server-images.env; then
+                            sed "s|^${TAG_KEY}=.*|${TAG_KEY}=${IMAGE_TAG}|" server-images.env > "$tmp_file"
+                        else
+                            cp server-images.env "$tmp_file"
+                            printf '\\n%s=%s\\n' "$TAG_KEY" "$IMAGE_TAG" >> "$tmp_file"
+                        fi
+
+                        mv "$tmp_file" server-images.env
+
+                        if git diff --quiet -- server-images.env; then
+                            echo "server-images.env already points ${TAG_KEY} at ${IMAGE_TAG}"
+                        else
+                            git add server-images.env
+                            git commit -m "ci: deploy ${SERVICE_NAME} ${IMAGE_TAG}"
+                            git push origin main
+                        fi
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh '''
+                docker image rm "${IMAGE_NAME}:build-${IMAGE_TAG}" "${IMAGE_NAME}:${IMAGE_TAG}" "${IMAGE_NAME}:main" >/dev/null 2>&1 || true
+                rm -rf .ci-infra
+            '''
+        }
+    }
+}
