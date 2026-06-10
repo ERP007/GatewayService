@@ -1,6 +1,6 @@
 package com.fallguys.gatewayservice;
 
-import com.fallguys.gatewayservice.controller.PasswordChangeController;
+import com.fallguys.gatewayservice.controller.AuthController;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -73,11 +73,11 @@ class SecurityFlowTests {
 
     @Test
     void passwordChangeEndpointStartsKeycloakUpdatePasswordAction() throws Exception {
-        mockMvc.perform(get("/auth/password-change").with(user("hq001")))
+        mockMvc.perform(get("/api/auth/password-change").with(user("hq001")))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/oauth2/authorization/keycloak?kc_action=UPDATE_PASSWORD"))
                 .andExpect(request().sessionAttribute(
-                        PasswordChangeController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE,
+                        AuthController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE,
                         FRONTEND_BASE_URL + "/mypage"
                 ));
     }
@@ -110,7 +110,7 @@ class SecurityFlowTests {
     void loginSuccessAfterPasswordChangeRedirectsToMyPage() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.getSession().setAttribute(
-                PasswordChangeController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE,
+                AuthController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE,
                 FRONTEND_BASE_URL + "/mypage"
         );
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -120,7 +120,7 @@ class SecurityFlowTests {
 
         assertThat(response.getRedirectedUrl()).isEqualTo(FRONTEND_BASE_URL + "/mypage");
         assertThat(request.getSession().getAttribute(
-                PasswordChangeController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE
+                AuthController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE
         )).isNull();
     }
 
@@ -128,7 +128,7 @@ class SecurityFlowTests {
     void loginFailureAfterPasswordChangeRedirectsToMyPage() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.getSession().setAttribute(
-                PasswordChangeController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE,
+                AuthController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE,
                 FRONTEND_BASE_URL + "/mypage"
         );
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -141,7 +141,7 @@ class SecurityFlowTests {
 
         assertThat(response.getRedirectedUrl()).isEqualTo(FRONTEND_BASE_URL + "/mypage");
         assertThat(request.getSession().getAttribute(
-                PasswordChangeController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE
+                AuthController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE
         )).isNull();
     }
 }
