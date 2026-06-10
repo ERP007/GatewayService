@@ -13,6 +13,7 @@ import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequest
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -45,6 +46,9 @@ class SecurityFlowTests {
 
     @Autowired
     private AuthenticationFailureHandler oauth2AuthenticationFailureHandler;
+
+    @Autowired
+    private LogoutSuccessHandler oidcLogoutSuccessHandler;
 
     @Autowired
     private OAuth2AuthorizationRequestResolver oauth2AuthorizationRequestResolver;
@@ -80,6 +84,16 @@ class SecurityFlowTests {
                         AuthController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE,
                         FRONTEND_BASE_URL + "/mypage"
                 ));
+    }
+
+    @Test
+    void logoutWithoutAuthenticationRedirectsToFrontendHome() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        oidcLogoutSuccessHandler.onLogoutSuccess(request, response, null);
+
+        assertThat(response.getRedirectedUrl()).isEqualTo(FRONTEND_BASE_URL);
     }
 
     @Test
