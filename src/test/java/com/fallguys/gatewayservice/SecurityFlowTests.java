@@ -19,6 +19,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.oidcLogin;
@@ -62,6 +64,23 @@ class SecurityFlowTests {
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/oauth2/authorization/keycloak"))
                 .andExpect(request().sessionAttribute("SPRING_SECURITY_SAVED_REQUEST", notNullValue()));
+    }
+
+    @Test
+    void unauthenticatedSwaggerRequestsDoNotRedirectToOauth2Login() throws Exception {
+        List<String> publicDocumentationPaths = List.of(
+                "/api/inventory/swagger-ui/index.html",
+                "/api/inventory/v3/api-docs"
+        );
+
+        for (String path : publicDocumentationPaths) {
+            mockMvc.perform(get(path))
+                    .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl()).isNull())
+                    .andExpect(result -> {
+                        int status = result.getResponse().getStatus();
+                        assertThat(status < 300 || status >= 400).isTrue();
+                    });
+        }
     }
 
     @Test
