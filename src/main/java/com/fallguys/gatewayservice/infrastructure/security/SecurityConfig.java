@@ -1,6 +1,6 @@
 package com.fallguys.gatewayservice.infrastructure.security;
 
-import com.fallguys.gatewayservice.controller.PasswordChangeController;
+import com.fallguys.gatewayservice.controller.AuthController;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -28,10 +28,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.net.URI;
-import java.util.Arrays;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Configuration
 public class SecurityConfig {
@@ -78,11 +75,11 @@ public class SecurityConfig {
         successHandler.setDefaultTargetUrl(frontendBaseUrl);
         return (request, response, authentication) -> {
             String passwordChangeTarget = (String) request.getSession()
-                    .getAttribute(PasswordChangeController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE);
+                    .getAttribute(AuthController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE);
 
             if (passwordChangeTarget != null) {
                 // UPDATE_PASSWORD 완료 후에는 일반 SavedRequest보다 비밀번호 변경을 시작한 React 화면으로 우선 복귀한다.
-                request.getSession().removeAttribute(PasswordChangeController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE);
+                request.getSession().removeAttribute(AuthController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE);
                 response.sendRedirect(passwordChangeTarget);
                 return;
             }
@@ -98,11 +95,11 @@ public class SecurityConfig {
         SimpleUrlAuthenticationFailureHandler failureHandler = new SimpleUrlAuthenticationFailureHandler(frontendBaseUrl);
         return (request, response, exception) -> {
             String passwordChangeTarget = (String) request.getSession()
-                    .getAttribute(PasswordChangeController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE);
+                    .getAttribute(AuthController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE);
 
             if (passwordChangeTarget != null) {
                 // 사용자가 Required Action을 취소하거나 실패해도 React가 마이페이지에서 후속 안내를 처리할 수 있게 한다.
-                request.getSession().removeAttribute(PasswordChangeController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE);
+                request.getSession().removeAttribute(AuthController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE);
                 response.sendRedirect(passwordChangeTarget);
                 return;
             }
@@ -194,7 +191,7 @@ public class SecurityConfig {
                 .map(String::trim)
                 .filter(origin -> !origin.isBlank())
                 .map(this::toOrigin)
-                .filter(origin -> origin != null)
+                .filter(Objects::nonNull)
                 .distinct()
                 .toList();
 

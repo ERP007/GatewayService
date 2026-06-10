@@ -4,19 +4,21 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 
 @Controller
-public class PasswordChangeController {
+@RequestMapping("/api/auth")
+public class AuthController {
 
     public static final String PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE = "PASSWORD_CHANGE_TARGET";
 
     private final String frontendBaseUrl;
 
-    public PasswordChangeController(@Value("${app.frontend-base-url}") String frontendBaseUrl) {
+    public AuthController(@Value("${app.frontend-base-url}") String frontendBaseUrl) {
         this.frontendBaseUrl = frontendBaseUrl;
     }
 
-    @GetMapping("/auth/password-change")
+    @GetMapping("/password-change")
     public String passwordChange(HttpServletRequest request) {
         // Keycloak Required Action 완료/취소 후 OAuth2 callback에서 다시 보낼 React 화면을 세션에 보관한다.
         request.getSession().setAttribute(PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE, frontendBaseUrl + "/mypage");
