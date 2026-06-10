@@ -1,7 +1,10 @@
 package com.fallguys.gatewayservice.infrastructure.security;
 
 import com.fallguys.gatewayservice.controller.AuthController;
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -34,6 +37,8 @@ import java.util.*;
 
 @Configuration
 public class SecurityConfig {
+
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
 
     // Spring Security가 Keycloak 로그인을 시작할 때 사용하는 기본 authorization endpoint prefix.
     private static final String AUTHORIZATION_REQUEST_BASE_URI = "/oauth2/authorization";
@@ -105,7 +110,7 @@ public class SecurityConfig {
      * 로그아웃 성공 후 처리.
      *
      * Spring의 OIDC logout handler가 Keycloak end_session_endpoint로 보낼 URL을 만든다.
-     * 인증 정보가 없거나 handler 내부에서 실패하면 Keycloak 에러 화면 대신 React 홈으로 돌려보낸다.
+     * 인증 정보가 없으면 React 홈으로 돌려보내고, OIDC logout 실패는 성공 로그아웃과 구분되게 처리한다.
      */
     @Bean
     public LogoutSuccessHandler oidcLogoutSuccessHandler(
@@ -124,9 +129,12 @@ public class SecurityConfig {
             try {
                 logoutSuccessHandler.onLogoutSuccess(request, response, authentication);
             } catch (Exception e) {
+                log.error("OIDC logout failed", e);
                 if (!response.isCommitted()) {
-                    response.sendRedirect(frontendBaseUrl);
+                    response.sendRedirect(logoutFailureRedirectUrl(frontendBaseUrl));
+                    return;
                 }
+                throw new ServletException("OIDC logout failed after response was committed", e);
             }
         };
     }
@@ -308,5 +316,10 @@ public class SecurityConfig {
         } catch (IllegalArgumentException e) {
             return null;
         }
+    }
+
+    private String 정logoutFailureRedirectUrl(String frontendBaseUrl) {
+        String separator = frontendBaseUrl.contains("?") ? "&" : "?";
+        return frontendBaseUrl + separator + "logout_error=1";
     }
 }
