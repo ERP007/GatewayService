@@ -1,5 +1,9 @@
 server:
   port: 8080
+  forward-headers-strategy: framework
+
+app:
+  frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
 
 spring:
   config:
