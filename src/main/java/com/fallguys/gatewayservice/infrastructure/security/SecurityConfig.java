@@ -120,6 +120,7 @@ public class SecurityConfig {
         OidcClientInitiatedLogoutSuccessHandler logoutSuccessHandler =
                 new OidcClientInitiatedLogoutSuccessHandler(clientRegistrationRepository);
         logoutSuccessHandler.setPostLogoutRedirectUri(frontendBaseUrl);
+        logoutSuccessHandler.setDefaultTargetUrl(frontendBaseUrl);
         return (request, response, authentication) -> {
             if (authentication == null) {
                 response.sendRedirect(frontendBaseUrl);
@@ -318,7 +319,7 @@ public class SecurityConfig {
         }
     }
 
-    private String 정logoutFailureRedirectUrl(String frontendBaseUrl) {
+    private String logoutFailureRedirectUrl(String frontendBaseUrl) {
         String separator = frontendBaseUrl.contains("?") ? "&" : "?";
         return frontendBaseUrl + separator + "logout_error=1";
     }
