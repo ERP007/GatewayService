@@ -27,6 +27,8 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.net.URI;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +38,7 @@ public class SecurityConfig {
 
     private static final String AUTHORIZATION_REQUEST_BASE_URI = "/oauth2/authorization";
     private static final String UPDATE_PASSWORD_ACTION = "UPDATE_PASSWORD";
+    private static final String DEFAULT_FRONTEND_ORIGIN = "http://localhost:5173";
 
     @Bean
     public SecurityFilterChain securityFilterChain(
@@ -148,9 +151,12 @@ public class SecurityConfig {
     }
 
     @Bean
-    CorsConfigurationSource corsConfigurationSource() {
+    CorsConfigurationSource corsConfigurationSource(
+            @Value("${app.cors.allowed-origins:${app.frontend-base-url:" + DEFAULT_FRONTEND_ORIGIN + "}}")
+            String corsAllowedOrigins
+    ) {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:5173"));
+        config.setAllowedOrigins(corsAllowedOrigins(corsAllowedOrigins));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
@@ -177,5 +183,36 @@ public class SecurityConfig {
         return OAuth2AuthorizationRequest.from(authorizationRequest)
                 .additionalParameters(additionalParameters)
                 .build();
+    }
+
+    private List<String> corsAllowedOrigins(String configuredOrigins) {
+        if (configuredOrigins == null || configuredOrigins.isBlank()) {
+            return List.of(DEFAULT_FRONTEND_ORIGIN);
+        }
+
+        List<String> allowedOrigins = Arrays.stream(configuredOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isBlank())
+                .map(this::toOrigin)
+                .filter(origin -> origin != null)
+                .distinct()
+                .toList();
+
+        if (allowedOrigins.isEmpty()) {
+            return List.of(DEFAULT_FRONTEND_ORIGIN);
+        }
+        return allowedOrigins;
+    }
+
+    private String toOrigin(String configuredOrigin) {
+        try {
+            URI originUri = URI.create(configuredOrigin);
+            if (originUri.getScheme() == null || originUri.getAuthority() == null) {
+                return null;
+            }
+            return originUri.getScheme() + "://" + originUri.getAuthority();
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }

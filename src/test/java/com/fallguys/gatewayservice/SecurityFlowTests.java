@@ -14,6 +14,8 @@ import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequ
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.notNullValue;
@@ -23,9 +25,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(properties = "eureka.client.enabled=false")
+@SpringBootTest(properties = {
+        "eureka.client.enabled=false",
+        "app.frontend-base-url=https://frontend.erp007.xyz/app",
+        "app.cors.allowed-origins=https://app.erp007.xyz,https://admin.erp007.xyz/admin"
+})
 @AutoConfigureMockMvc
 class SecurityFlowTests {
+
+    private static final String FRONTEND_BASE_URL = "https://frontend.erp007.xyz/app";
+    private static final String APP_ORIGIN = "https://app.erp007.xyz";
+    private static final String ADMIN_ORIGIN = "https://admin.erp007.xyz";
 
     @Autowired
     private MockMvc mockMvc;
@@ -38,6 +48,9 @@ class SecurityFlowTests {
 
     @Autowired
     private OAuth2AuthorizationRequestResolver oauth2AuthorizationRequestResolver;
+
+    @Autowired
+    private CorsConfigurationSource corsConfigurationSource;
 
     @Test
     void unauthenticatedGatewayRequestRedirectsToOauth2Login() throws Exception {
@@ -55,7 +68,7 @@ class SecurityFlowTests {
 
         oauth2AuthenticationSuccessHandler.onAuthenticationSuccess(request, response, authentication);
 
-        assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:5173");
+        assertThat(response.getRedirectedUrl()).isEqualTo(FRONTEND_BASE_URL);
     }
 
     @Test
@@ -65,8 +78,19 @@ class SecurityFlowTests {
                 .andExpect(redirectedUrl("/oauth2/authorization/keycloak?kc_action=UPDATE_PASSWORD"))
                 .andExpect(request().sessionAttribute(
                         PasswordChangeController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE,
-                        "http://localhost:5173/mypage"
+                        FRONTEND_BASE_URL + "/mypage"
                 ));
+    }
+
+    @Test
+    void corsAllowedOriginsUseConfiguredCorsOrigins() {
+        MockHttpServletRequest request = new MockHttpServletRequest("OPTIONS", "/api/users/session");
+        request.addHeader("Origin", APP_ORIGIN);
+
+        CorsConfiguration corsConfiguration = corsConfigurationSource.getCorsConfiguration(request);
+
+        assertThat(corsConfiguration).isNotNull();
+        assertThat(corsConfiguration.getAllowedOrigins()).containsExactly(APP_ORIGIN, ADMIN_ORIGIN);
     }
 
     @Test
@@ -87,14 +111,14 @@ class SecurityFlowTests {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.getSession().setAttribute(
                 PasswordChangeController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE,
-                "http://localhost:5173/mypage"
+                FRONTEND_BASE_URL + "/mypage"
         );
         MockHttpServletResponse response = new MockHttpServletResponse();
         TestingAuthenticationToken authentication = new TestingAuthenticationToken("user", "password");
 
         oauth2AuthenticationSuccessHandler.onAuthenticationSuccess(request, response, authentication);
 
-        assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:5173/mypage");
+        assertThat(response.getRedirectedUrl()).isEqualTo(FRONTEND_BASE_URL + "/mypage");
         assertThat(request.getSession().getAttribute(
                 PasswordChangeController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE
         )).isNull();
@@ -105,7 +129,7 @@ class SecurityFlowTests {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.getSession().setAttribute(
                 PasswordChangeController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE,
-                "http://localhost:5173/mypage"
+                FRONTEND_BASE_URL + "/mypage"
         );
         MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -115,7 +139,7 @@ class SecurityFlowTests {
                 new BadCredentialsException("password change cancelled")
         );
 
-        assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:5173/mypage");
+        assertThat(response.getRedirectedUrl()).isEqualTo(FRONTEND_BASE_URL + "/mypage");
         assertThat(request.getSession().getAttribute(
                 PasswordChangeController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE
         )).isNull();
