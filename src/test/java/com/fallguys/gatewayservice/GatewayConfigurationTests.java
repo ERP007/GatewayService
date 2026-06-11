@@ -5,10 +5,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cloud.gateway.server.mvc.config.FilterProperties;
 import org.springframework.cloud.gateway.server.mvc.config.GatewayMvcProperties;
+import org.springframework.context.annotation.Import;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(properties = "eureka.client.enabled=false")
+@Import(TestOAuth2ClientConfig.class)
 class GatewayConfigurationTests {
 
     @Autowired

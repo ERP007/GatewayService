@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
@@ -37,6 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.cors.allowed-origins=https://app.erp007.xyz,https://admin.erp007.xyz/admin"
 })
 @AutoConfigureMockMvc
+@Import(TestOAuth2ClientConfig.class)
 class SecurityFlowTests {
 
     private static final String FRONTEND_BASE_URL = "https://frontend.erp007.xyz/app";
@@ -81,6 +83,16 @@ class SecurityFlowTests {
                         assertThat(status < 300 || status >= 400).isTrue();
                     });
         }
+    }
+
+    @Test
+    void unauthenticatedHealthRequestsDoNotRedirectToOauth2Login() throws Exception {
+        mockMvc.perform(get("/api/procurement-orders/health"))
+                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl()).isNull())
+                .andExpect(result -> {
+                    int status = result.getResponse().getStatus();
+                    assertThat(status < 300 || status >= 400).isTrue();
+                });
     }
 
     @Test

@@ -49,7 +49,8 @@ public class SecurityConfig {
     // CORS 설정값이 비어 있을 때 로컬 React 개발 서버를 기본 허용 origin으로 사용한다.
     private static final String DEFAULT_FRONTEND_ORIGIN = "http://localhost:5173";
 
-    private static final String[] SWAGGER_PERMIT_MATCHERS = {
+    private static final String[] PUBLIC_API_MATCHERS = {
+            "/api/*/health",
             "/api/*/swagger-ui/**",
             "/api/*/swagger-ui.html",
             "/api/*/v3/api-docs/**"
@@ -80,7 +81,7 @@ public class SecurityConfig {
                                 "/api/auth/logout",
                                 "/error"
                         ).permitAll()
-                        .requestMatchers(SWAGGER_PERMIT_MATCHERS).permitAll()
+                        .requestMatchers(PUBLIC_API_MATCHERS).permitAll()
                         .anyRequest().authenticated())
 
                 // Keycloak 로그인 플로우. 커스텀 resolver/handler를 끼워 비밀번호 변경 AIA와 React 복귀를 처리한다.
