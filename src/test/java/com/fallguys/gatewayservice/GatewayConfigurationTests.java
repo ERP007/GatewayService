@@ -17,7 +17,7 @@ class GatewayConfigurationTests {
     private GatewayMvcProperties gatewayMvcProperties;
 
     @Test
-    void userRouteRelaysAuthorizedClientAccessToken() {
+    void userRoutePassesAuthorizationHeaderWithoutTokenRelay() {
         assertThat(gatewayMvcProperties.getRoutes())
                 .singleElement()
                 .satisfies(route -> {
@@ -30,8 +30,8 @@ class GatewayConfigurationTests {
                             .containsValue("/api/users/**");
                     assertThat(route.getFilters())
                             .extracting(FilterProperties::getName)
-                            .containsExactly("TokenRelay", "StripPrefix");
-                    assertThat(route.getFilters().get(1).getArgs())
+                            .containsExactly("StripPrefix");
+                    assertThat(route.getFilters().getFirst().getArgs())
                             .containsValue("1");
                 });
     }
