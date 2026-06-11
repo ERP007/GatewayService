@@ -26,6 +26,7 @@ spring:
 
               filters:
                 - StripPrefix=1
+                - TokenRelay=
   security:
     oauth2:
       resourceserver:

@@ -65,7 +65,7 @@ class SecurityFlowTests {
 
     @Test
     void unauthenticatedApiRequestReturnsUnauthorizedWithoutOauth2Redirect() throws Exception {
-        mockMvc.perform(get("/api/users"))
+        mockMvc.perform(get("/api/users/session"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl()).isNull());
     }
@@ -112,14 +112,21 @@ class SecurityFlowTests {
     }
 
     @Test
-    void loginSuccessWithoutSavedRequestRedirectsToFrontendHome() throws Exception {
+    void authLoginEndpointStartsKeycloakLogin() throws Exception {
+        mockMvc.perform(get("/api/auth/login"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/oauth2/authorization/keycloak"));
+    }
+
+    @Test
+    void loginSuccessWithoutSavedRequestRedirectsToFrontendDashboard() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
         TestingAuthenticationToken authentication = new TestingAuthenticationToken("user", "password");
 
         oauth2AuthenticationSuccessHandler.onAuthenticationSuccess(request, response, authentication);
 
-        assertThat(response.getRedirectedUrl()).isEqualTo(FRONTEND_BASE_URL);
+        assertThat(response.getRedirectedUrl()).isEqualTo(FRONTEND_BASE_URL + "/dashboard");
     }
 
     @Test

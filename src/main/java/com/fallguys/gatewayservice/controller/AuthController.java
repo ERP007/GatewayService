@@ -18,6 +18,11 @@ public class AuthController {
         this.frontendBaseUrl = frontendBaseUrl;
     }
 
+    @GetMapping("/login")
+    public String login() {
+        return "redirect:/oauth2/authorization/keycloak";
+    }
+
     @GetMapping("/password-change")
     public String passwordChange(HttpServletRequest request) {
         // Keycloak Required Action 완료/취소 후 OAuth2 callback에서 다시 보낼 React 화면을 세션에 보관한다.

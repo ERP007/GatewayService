@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -22,6 +23,7 @@ import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequ
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
@@ -78,6 +80,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/login/**",
                                 "/oauth2/**",
+                                "/api/auth/login",
                                 "/api/auth/logout",
                                 "/error"
                         ).permitAll()
@@ -114,7 +117,7 @@ public class SecurityConfig {
     }
 
     /*
-     * API 요청은 Bearer JWT 기반 Resource Server로 처리한다.
+     * API 요청은 Gateway 세션 또는 Bearer JWT 기반으로 처리한다.
      * 인증 실패는 OAuth2 Login redirect가 아니라 401/403 API 응답으로 끝난다.
      */
     @Bean
@@ -123,12 +126,14 @@ public class SecurityConfig {
         http
                 .securityMatcher("/api/**")
                 .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                        session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(PUBLIC_API_MATCHERS).permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
                 .cors(Customizer.withDefaults())
                 .csrf(AbstractHttpConfigurer::disable);
 
@@ -186,7 +191,7 @@ public class SecurityConfig {
     /*
      * OAuth2 로그인 성공 후 처리.
      *
-     * 일반 로그인 성공이면 SavedRequest가 있으면 원래 요청으로, 없으면 React 홈으로 이동한다.
+     * 일반 로그인 성공이면 SavedRequest가 있으면 원래 요청으로, 없으면 React 대시보드로 이동한다.
      * 마이페이지에서 비밀번호 변경을 시작한 경우에는 저장해 둔 /mypage 경로로 우선 복귀한다.
      */
     @Bean
@@ -195,7 +200,7 @@ public class SecurityConfig {
     ) {
         SavedRequestAwareAuthenticationSuccessHandler successHandler = new SavedRequestAwareAuthenticationSuccessHandler();
         successHandler.setRequestCache(new HttpSessionRequestCache());
-        successHandler.setDefaultTargetUrl(frontendBaseUrl);
+        successHandler.setDefaultTargetUrl(frontendRedirectUrl(frontendBaseUrl, "/dashboard"));
         return (request, response, authentication) -> {
             String passwordChangeTarget = (String) request.getSession()
                     .getAttribute(AuthController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE);
@@ -342,5 +347,12 @@ public class SecurityConfig {
     private String logoutFailureRedirectUrl(String frontendBaseUrl) {
         String separator = frontendBaseUrl.contains("?") ? "&" : "?";
         return frontendBaseUrl + separator + "logout_error=1";
+    }
+
+    private String frontendRedirectUrl(String frontendBaseUrl, String path) {
+        String normalizedBaseUrl = frontendBaseUrl.endsWith("/")
+                ? frontendBaseUrl.substring(0, frontendBaseUrl.length() - 1)
+                : frontendBaseUrl;
+        return normalizedBaseUrl + path;
     }
 }
