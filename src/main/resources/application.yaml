@@ -1,6 +1,10 @@
 server:
   port: 8080
   forward-headers-strategy: framework
+  servlet:
+    cookie:
+      same-site: none
+      secure: true
 
 app:
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
