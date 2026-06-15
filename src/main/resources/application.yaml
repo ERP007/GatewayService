@@ -33,10 +33,14 @@ spring:
                 - Path=/api/users/**
 
               filters:
-                - TokenRelay
                 - StripPrefix=1
+                - TokenRelay=
   security:
     oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:9001/realms/master}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:${KEYCLOAK_ISSUER_URI:http://localhost:9001/realms/master}/protocol/openid-connect/certs}
       client:
         registration:
           keycloak:

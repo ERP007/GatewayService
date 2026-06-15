@@ -6,8 +6,11 @@ import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
@@ -15,14 +18,17 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
+import org.springframework.security.oauth2.jwt.BadJwtException;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.oidcLogin;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -38,6 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.cors.allowed-origins=https://app.erp007.xyz,https://admin.erp007.xyz/admin"
 })
 @AutoConfigureMockMvc
+@Import({TestOAuth2ClientConfig.class, SecurityFlowTests.TestJwtDecoderConfig.class})
 class SecurityFlowTests {
 
     private static final String FRONTEND_BASE_URL = "https://frontend.erp007.xyz/app";
@@ -63,11 +70,58 @@ class SecurityFlowTests {
     private CorsConfigurationSource corsConfigurationSource;
 
     @Test
-    void unauthenticatedGatewayRequestRedirectsToOauth2Login() throws Exception {
-        mockMvc.perform(get("/api/users"))
+    void unauthenticatedApiRequestReturnsUnauthorizedWithoutOauth2Redirect() throws Exception {
+        mockMvc.perform(get("/api/users/session"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl()).isNull());
+    }
+
+    @Test
+    void invalidBearerApiRequestReturnsUnauthorizedWithoutOauth2Redirect() throws Exception {
+        mockMvc.perform(get("/api/users").header("Authorization", "Bearer invalid-token"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl()).isNull());
+    }
+
+    @Test
+    void unauthenticatedSwaggerRequestsDoNotRedirectToOauth2Login() throws Exception {
+        List<String> publicDocumentationPaths = List.of(
+                "/api/inventory/swagger-ui/index.html",
+                "/api/inventory/v3/api-docs"
+        );
+
+        for (String path : publicDocumentationPaths) {
+            mockMvc.perform(get(path))
+                    .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl()).isNull())
+                    .andExpect(result -> {
+                        int status = result.getResponse().getStatus();
+                        assertThat(status < 300 || status >= 400).isTrue();
+                    });
+        }
+    }
+
+    @Test
+    void unauthenticatedHealthRequestsDoNotRedirectToOauth2Login() throws Exception {
+        mockMvc.perform(get("/api/procurement-orders/health"))
+                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl()).isNull())
+                .andExpect(result -> {
+                    int status = result.getResponse().getStatus();
+                    assertThat(status < 300 || status >= 400).isTrue();
+                });
+    }
+
+    @Test
+    void gatewayHealthRequestDoesNotRequireAuthentication() throws Exception {
+        mockMvc.perform(get("/api/gateway/health"))
+                .andExpect(status().isOk())
+                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl()).isNull());
+    }
+
+    @Test
+    void authLoginEndpointStartsKeycloakLogin() throws Exception {
+        mockMvc.perform(get("/api/auth/login"))
                 .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/oauth2/authorization/keycloak"))
-                .andExpect(request().sessionAttribute("SPRING_SECURITY_SAVED_REQUEST", notNullValue()));
+                .andExpect(redirectedUrl("/oauth2/authorization/keycloak"));
     }
 
     @Test
@@ -88,7 +142,7 @@ class SecurityFlowTests {
 
         oauth2AuthenticationSuccessHandler.onAuthenticationSuccess(request, response, authentication);
 
-        assertThat(response.getRedirectedUrl()).isEqualTo(FRONTEND_BASE_URL);
+        assertThat(response.getRedirectedUrl()).isEqualTo(FRONTEND_BASE_URL + "/dashboard");
     }
 
     @Test
@@ -190,5 +244,16 @@ class SecurityFlowTests {
         assertThat(request.getSession().getAttribute(
                 AuthController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE
         )).isNull();
+    }
+
+    @TestConfiguration
+    static class TestJwtDecoderConfig {
+
+        @Bean
+        JwtDecoder jwtDecoder() {
+            return token -> {
+                throw new BadJwtException("invalid token");
+            };
+        }
     }
 }

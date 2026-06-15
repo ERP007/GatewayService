@@ -14,18 +14,14 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.oauth2.client.oidc.web.logout.OidcClientInitiatedLogoutSuccessHandler;
-import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
-import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProvider;
-import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProviderBuilder;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
-import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizedClientManager;
 import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
-import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
@@ -83,6 +79,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/login/**",
                                 "/oauth2/**",
+                                "/api/auth/login",
                                 "/api/auth/logout",
                                 "/error"
                         ).permitAll()
@@ -107,13 +104,51 @@ public class SecurityConfig {
                         .deleteCookies("JSESSIONID", "SESSION")
                 )
 
-                // TokenRelay 필터와 OAuth2AuthorizedClientManager가 OAuth2 client 저장소를 사용할 수 있게 한다.
+                // OAuth2 Login 세션 흐름에서 authorized client 저장소를 사용할 수 있게 한다.
                 .oauth2Client(Customizer.withDefaults())
 
                 // React 개발 서버에서 credentials 포함 요청을 받을 수 있게 CorsConfigurationSource bean을 적용한다.
                 .cors(Customizer.withDefaults())
 
-                // 현재 Gateway는 쿠키 세션 + OAuth2 redirect 흐름이고, 별도 CSRF 토큰 발급을 쓰지 않아 비활성화했다.
+                // 현재 Gateway는 별도 CSRF 토큰 발급을 쓰지 않아 비활성화했다.
+                .csrf(AbstractHttpConfigurer::disable);
+
+        return http.build();
+    }
+
+    /*
+     * API 요청은 Gateway 세션 또는 Bearer JWT 기반으로 처리한다.
+     * 인증 실패는 OAuth2 Login redirect가 아니라 401/403 API 응답으로 끝난다.
+     */
+    @Bean
+    @Order(2)
+    public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .securityMatcher("/api/**")
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers(PUBLIC_API_MATCHERS).permitAll()
+                        .anyRequest().authenticated())
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+                .cors(Customizer.withDefaults())
+                .csrf(AbstractHttpConfigurer::disable);
+
+        return http.build();
+    }
+
+    /*
+     * Gateway는 외부 API/인증 endpoint만 제공한다. 그 외 직접 접근은 명시적으로 차단한다.
+     */
+    @Bean
+    @Order(3)
+    public SecurityFilterChain fallbackSecurityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .authorizeHttpRequests(authorize -> authorize.anyRequest().denyAll())
+                .cors(Customizer.withDefaults())
                 .csrf(AbstractHttpConfigurer::disable);
 
         return http.build();
@@ -170,7 +205,7 @@ public class SecurityConfig {
     /*
      * OAuth2 로그인 성공 후 처리.
      *
-     * 일반 로그인 성공이면 SavedRequest가 있으면 원래 요청으로, 없으면 React 홈으로 이동한다.
+     * 일반 로그인 성공이면 SavedRequest가 있으면 원래 요청으로, 없으면 React 대시보드로 이동한다.
      * 마이페이지에서 비밀번호 변경을 시작한 경우에는 저장해 둔 /mypage 경로로 우선 복귀한다.
      */
     @Bean
@@ -179,7 +214,7 @@ public class SecurityConfig {
     ) {
         SavedRequestAwareAuthenticationSuccessHandler successHandler = new SavedRequestAwareAuthenticationSuccessHandler();
         successHandler.setRequestCache(new HttpSessionRequestCache());
-        successHandler.setDefaultTargetUrl(frontendBaseUrl);
+        successHandler.setDefaultTargetUrl(frontendRedirectUrl(frontendBaseUrl, "/dashboard"));
         return (request, response, authentication) -> {
             String passwordChangeTarget = (String) request.getSession()
                     .getAttribute(AuthController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE);
@@ -247,29 +282,6 @@ public class SecurityConfig {
                 return customizeAuthorizationRequest(delegate.resolve(request, clientRegistrationId), request);
             }
         };
-    }
-
-    /*
-     * Gateway가 보관 중인 OAuth2 authorized client를 꺼내거나 갱신할 때 쓰는 manager.
-     *
-     * Spring Cloud Gateway MVC의 TokenRelay가 downstream UserService 호출 시 access token을 전달하고,
-     * 필요하면 refresh token으로 갱신할 수 있게 authorization_code/refresh_token provider를 등록한다.
-     */
-    @Bean
-    public OAuth2AuthorizedClientManager authorizedClientManager(
-            ClientRegistrationRepository clientRegistrationRepository,
-            OAuth2AuthorizedClientRepository authorizedClientRepository
-    ) {
-        OAuth2AuthorizedClientProvider authorizedClientProvider = OAuth2AuthorizedClientProviderBuilder.builder()
-                .authorizationCode()
-                .refreshToken()
-                .build();
-        DefaultOAuth2AuthorizedClientManager authorizedClientManager = new DefaultOAuth2AuthorizedClientManager(
-                clientRegistrationRepository,
-                authorizedClientRepository
-        );
-        authorizedClientManager.setAuthorizedClientProvider(authorizedClientProvider);
-        return authorizedClientManager;
     }
 
     /*
@@ -349,5 +361,12 @@ public class SecurityConfig {
     private String logoutFailureRedirectUrl(String frontendBaseUrl) {
         String separator = frontendBaseUrl.contains("?") ? "&" : "?";
         return frontendBaseUrl + separator + "logout_error=1";
+    }
+
+    private String frontendRedirectUrl(String frontendBaseUrl, String path) {
+        String normalizedBaseUrl = frontendBaseUrl.endsWith("/")
+                ? frontendBaseUrl.substring(0, frontendBaseUrl.length() - 1)
+                : frontendBaseUrl;
+        return normalizedBaseUrl + path;
     }
 }
