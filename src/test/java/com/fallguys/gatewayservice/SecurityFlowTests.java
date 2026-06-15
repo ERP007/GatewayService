@@ -1,12 +1,14 @@
 package com.fallguys.gatewayservice;
 
 import com.fallguys.gatewayservice.controller.AuthController;
+import com.fallguys.gatewayservice.controller.OAuth2TokenDebugController;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -38,6 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties = {
         "eureka.client.enabled=false",
         "app.frontend-base-url=https://frontend.erp007.xyz/app",
+        "app.debug.oauth2-token-enabled=true",
         "app.cors.allowed-origins=https://app.erp007.xyz,https://admin.erp007.xyz/admin"
 })
 @AutoConfigureMockMvc
@@ -50,6 +53,9 @@ class SecurityFlowTests {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private ApplicationContext applicationContext;
 
     @Autowired
     private AuthenticationSuccessHandler oauth2AuthenticationSuccessHandler;
@@ -119,7 +125,17 @@ class SecurityFlowTests {
     }
 
     @Test
-    void loginSuccessWithoutSavedRequestRedirectsToFrontendDashboard() throws Exception {
+    void unauthenticatedDebugTokenRequestStartsKeycloakLogin() throws Exception {
+        assertThat(applicationContext.getBeanNamesForType(OAuth2TokenDebugController.class)).isNotEmpty();
+
+        mockMvc.perform(get("/api/debug/oauth2-token"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl())
+                        .contains("/oauth2/authorization/keycloak"));
+    }
+
+    @Test
+    void loginSuccessWithoutSavedRequestRedirectsToFrontendEntryPoint() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
         TestingAuthenticationToken authentication = new TestingAuthenticationToken("user", "password");
