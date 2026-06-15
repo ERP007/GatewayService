@@ -68,19 +68,17 @@ class SecurityFlowTests {
     private CorsConfigurationSource corsConfigurationSource;
 
     @Test
-    void unauthenticatedApiRequestStartsKeycloakLogin() throws Exception {
+    void unauthenticatedApiRequestReturnsUnauthorizedWithoutKeycloakRedirect() throws Exception {
         mockMvc.perform(get("/api/users/session"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl())
-                        .contains("/oauth2/authorization/keycloak"));
+                .andExpect(status().isUnauthorized())
+                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl()).isNull());
     }
 
     @Test
-    void invalidBearerApiRequestStartsKeycloakLoginWhenGatewaySessionIsMissing() throws Exception {
+    void invalidBearerApiRequestReturnsUnauthorizedWithoutKeycloakRedirect() throws Exception {
         mockMvc.perform(get("/api/users").header("Authorization", "Bearer invalid-token"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl())
-                        .contains("/oauth2/authorization/keycloak"));
+                .andExpect(status().isUnauthorized())
+                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl()).isNull());
     }
 
     @Test
@@ -125,13 +123,12 @@ class SecurityFlowTests {
     }
 
     @Test
-    void unauthenticatedDebugTokenRequestStartsKeycloakLogin() throws Exception {
+    void unauthenticatedDebugTokenRequestReturnsUnauthorizedWithoutKeycloakRedirect() throws Exception {
         assertThat(applicationContext.getBeanNamesForType(OAuth2TokenDebugController.class)).isNotEmpty();
 
         mockMvc.perform(get("/api/debug/oauth2-token"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl())
-                        .contains("/oauth2/authorization/keycloak"));
+                .andExpect(status().isUnauthorized())
+                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl()).isNull());
     }
 
     @Test
