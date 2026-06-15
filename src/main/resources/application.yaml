@@ -11,6 +11,7 @@ app:
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
   debug:
     oauth2-token-enabled: ${OAUTH2_TOKEN_DEBUG_ENABLED:false}
+    oauth2-token-include-values: ${OAUTH2_TOKEN_DEBUG_INCLUDE_VALUES:false}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:${FRONTEND_BASE_URL:http://localhost:5173}}
 

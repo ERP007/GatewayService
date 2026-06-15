@@ -19,10 +19,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class OAuth2TokenDebugControllerTests {
 
-    private final OAuth2TokenDebugController controller = new OAuth2TokenDebugController();
-
     @Test
-    void tokenResponseIncludesAccessTokenAndRefreshTokenValues() {
+    void tokenResponseCanIncludeAccessTokenValueWithoutRefreshTokenValue() {
         Instant issuedAt = Instant.parse("2026-06-13T00:00:00Z");
         Instant expiresAt = Instant.parse("2026-06-13T01:00:00Z");
         String tokenValue = new PlainJWT(new JWTClaimsSet.Builder()
@@ -46,6 +44,7 @@ class OAuth2TokenDebugControllerTests {
                 ),
                 new OAuth2RefreshToken("refresh-token-secret", issuedAt, expiresAt)
         );
+        OAuth2TokenDebugController controller = new OAuth2TokenDebugController(true);
 
         ResponseEntity<Map<String, Object>> response = controller.token(client);
 
@@ -55,6 +54,7 @@ class OAuth2TokenDebugControllerTests {
 
         Map<String, Object> accessToken = mapValue(body, "accessToken");
         assertThat(accessToken)
+                .containsEntry("tokenPresent", true)
                 .containsEntry("tokenValue", tokenValue)
                 .containsEntry("tokenType", "Bearer")
                 .containsEntry("userRole", "BRANCH_STAFF");
@@ -67,9 +67,37 @@ class OAuth2TokenDebugControllerTests {
 
         Map<String, Object> refreshToken = mapValue(body, "refreshToken");
         assertThat(refreshToken)
-                .containsEntry("tokenValue", "refresh-token-secret")
+                .containsEntry("tokenPresent", true)
                 .containsEntry("issuedAt", issuedAt)
-                .containsEntry("expiresAt", expiresAt);
+                .containsEntry("expiresAt", expiresAt)
+                .doesNotContainKey("tokenValue");
+    }
+
+    @Test
+    void tokenResponseHidesTokenValuesByDefault() {
+        Instant issuedAt = Instant.parse("2026-06-13T00:00:00Z");
+        OAuth2AuthorizedClient client = authorizedClient(
+                new OAuth2AccessToken(
+                        OAuth2AccessToken.TokenType.BEARER,
+                        "opaque-access-token",
+                        issuedAt,
+                        issuedAt.plusSeconds(3600)
+                ),
+                new OAuth2RefreshToken("refresh-token-secret", issuedAt)
+        );
+        OAuth2TokenDebugController controller = new OAuth2TokenDebugController(false);
+
+        ResponseEntity<Map<String, Object>> response = controller.token(client);
+
+        Map<String, Object> accessToken = mapValue(response.getBody(), "accessToken");
+        assertThat(accessToken)
+                .containsEntry("tokenPresent", true)
+                .doesNotContainKey("tokenValue");
+
+        Map<String, Object> refreshToken = mapValue(response.getBody(), "refreshToken");
+        assertThat(refreshToken)
+                .containsEntry("tokenPresent", true)
+                .doesNotContainKey("tokenValue");
     }
 
     @Test
@@ -84,11 +112,13 @@ class OAuth2TokenDebugControllerTests {
                 ),
                 null
         );
+        OAuth2TokenDebugController controller = new OAuth2TokenDebugController(true);
 
         ResponseEntity<Map<String, Object>> response = controller.token(client);
 
         Map<String, Object> accessToken = mapValue(response.getBody(), "accessToken");
         assertThat(accessToken)
+                .containsEntry("tokenPresent", true)
                 .containsEntry("tokenValue", "opaque-access-token");
         assertThat(mapValue(accessToken, "claims").get("decodeError")).isNotNull();
         assertThat(response.getBody()).containsEntry("refreshToken", null);
