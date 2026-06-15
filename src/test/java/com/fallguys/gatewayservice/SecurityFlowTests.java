@@ -18,8 +18,6 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
-import org.springframework.security.oauth2.jwt.BadJwtException;
-import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.test.web.servlet.MockMvc;
@@ -44,7 +42,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "app.cors.allowed-origins=https://app.erp007.xyz,https://admin.erp007.xyz/admin"
 })
 @AutoConfigureMockMvc
-@Import({TestOAuth2ClientConfig.class, SecurityFlowTests.TestJwtDecoderConfig.class})
+@Import(TestOAuth2ClientConfig.class)
 class SecurityFlowTests {
 
     private static final String FRONTEND_BASE_URL = "https://frontend.erp007.xyz/app";
@@ -70,17 +68,19 @@ class SecurityFlowTests {
     private CorsConfigurationSource corsConfigurationSource;
 
     @Test
-    void unauthenticatedApiRequestReturnsUnauthorizedWithoutOauth2Redirect() throws Exception {
+    void unauthenticatedApiRequestStartsKeycloakLogin() throws Exception {
         mockMvc.perform(get("/api/users/session"))
-                .andExpect(status().isUnauthorized())
-                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl()).isNull());
+                .andExpect(status().is3xxRedirection())
+                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl())
+                        .contains("/oauth2/authorization/keycloak"));
     }
 
     @Test
-    void invalidBearerApiRequestReturnsUnauthorizedWithoutOauth2Redirect() throws Exception {
+    void invalidBearerApiRequestStartsKeycloakLoginWhenGatewaySessionIsMissing() throws Exception {
         mockMvc.perform(get("/api/users").header("Authorization", "Bearer invalid-token"))
-                .andExpect(status().isUnauthorized())
-                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl()).isNull());
+                .andExpect(status().is3xxRedirection())
+                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl())
+                        .contains("/oauth2/authorization/keycloak"));
     }
 
     @Test
@@ -142,7 +142,7 @@ class SecurityFlowTests {
 
         oauth2AuthenticationSuccessHandler.onAuthenticationSuccess(request, response, authentication);
 
-        assertThat(response.getRedirectedUrl()).isEqualTo(FRONTEND_BASE_URL + "/dashboard");
+        assertThat(response.getRedirectedUrl()).isEqualTo(FRONTEND_BASE_URL);
     }
 
     @Test
@@ -244,16 +244,5 @@ class SecurityFlowTests {
         assertThat(request.getSession().getAttribute(
                 AuthController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE
         )).isNull();
-    }
-
-    @TestConfiguration
-    static class TestJwtDecoderConfig {
-
-        @Bean
-        JwtDecoder jwtDecoder() {
-            return token -> {
-                throw new BadJwtException("invalid token");
-            };
-        }
     }
 }
