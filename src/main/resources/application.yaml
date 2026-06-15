@@ -2,12 +2,15 @@ server:
   port: 8080
   forward-headers-strategy: framework
   servlet:
-    cookie:
-      same-site: none
-      secure: true
+    session:
+      cookie:
+        same-site: none
+        secure: true
 
 app:
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+  debug:
+    oauth2-token-enabled: ${OAUTH2_TOKEN_DEBUG_ENABLED:false}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:${FRONTEND_BASE_URL:http://localhost:5173}}
 

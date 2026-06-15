@@ -8,10 +8,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.oauth2.client.oidc.web.logout.OidcClientInitiatedLogoutSuccessHandler;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientProvider;
@@ -23,6 +24,7 @@ import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepo
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
@@ -49,16 +51,23 @@ public class SecurityConfig {
     // CORS 설정값이 비어 있을 때 로컬 React 개발 서버를 기본 허용 origin으로 사용한다.
     private static final String DEFAULT_FRONTEND_ORIGIN = "http://localhost:5173";
 
+    private static final String[] PUBLIC_API_MATCHERS = {
+            "/api/*/health",
+            "/api/*/swagger-ui/**",
+            "/api/*/swagger-ui.html",
+            "/api/*/v3/api-docs/**"
+    };
+
     /*
-     * 애플리케이션의 보안 필터 전체 흐름을 조립한다.
+     * OAuth2 Login 기반 세션 흐름을 조립한다.
      *
-     * - 인증이 필요 없는 endpoint를 열어 둔다.
+     * - API, 로그인 시작, callback, logout, 에러 endpoint를 OAuth2 Client 세션 흐름으로 보호한다.
      * - OAuth2 로그인 성공/실패 후 React로 돌아가는 handler를 연결한다.
      * - 로그아웃 시 Gateway 세션을 지우고 Keycloak SSO 로그아웃으로 보낸다.
-     * - Gateway가 downstream service로 token relay를 할 수 있게 OAuth2 client 기능을 켠다.
      */
     @Bean
-    public SecurityFilterChain securityFilterChain(
+    @Order(1)
+    public SecurityFilterChain oauth2LoginSecurityFilterChain(
             HttpSecurity http,
             AuthenticationSuccessHandler oauth2AuthenticationSuccessHandler,
             AuthenticationFailureHandler oauth2AuthenticationFailureHandler,
@@ -66,14 +75,18 @@ public class SecurityConfig {
             OAuth2AuthorizationRequestResolver oauth2AuthorizationRequestResolver
     ) throws Exception {
         http
-                // 로그인 시작, OAuth2 callback, 로그아웃, 에러 페이지는 인증 없이 접근 가능해야 한다.
+                .securityMatcher("/api/**", "/login/**", "/oauth2/**", "/error")
+
+                // 로그인 시작, OAuth2 callback, 로그아웃, 공개 API, 에러 페이지는 인증 없이 접근 가능해야 한다.
                 .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(
                                 "/login/**",
                                 "/oauth2/**",
                                 "/api/auth/logout",
                                 "/error"
                         ).permitAll()
+                        .requestMatchers(PUBLIC_API_MATCHERS).permitAll()
                         .anyRequest().authenticated())
 
                 // Keycloak 로그인 플로우. 커스텀 resolver/handler를 끼워 비밀번호 변경 AIA와 React 복귀를 처리한다.
@@ -101,6 +114,20 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
 
                 // 현재 Gateway는 쿠키 세션 + OAuth2 redirect 흐름이고, 별도 CSRF 토큰 발급을 쓰지 않아 비활성화했다.
+                .csrf(AbstractHttpConfigurer::disable);
+
+        return http.build();
+    }
+
+    /*
+     * Gateway는 외부 API/인증 endpoint만 제공한다. 그 외 직접 접근은 명시적으로 차단한다.
+     */
+    @Bean
+    @Order(2)
+    public SecurityFilterChain fallbackSecurityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .authorizeHttpRequests(authorize -> authorize.anyRequest().denyAll())
+                .cors(Customizer.withDefaults())
                 .csrf(AbstractHttpConfigurer::disable);
 
         return http.build();

@@ -65,7 +65,15 @@ class SecurityFlowTests {
     }
 
     @Test
-    void loginSuccessWithoutSavedRequestRedirectsToFrontendHome() throws Exception {
+    void unauthenticatedDebugTokenRequestStartsKeycloakLogin() throws Exception {
+        mockMvc.perform(get("/api/debug/oauth2-token"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl())
+                        .contains("/oauth2/authorization/keycloak"));
+    }
+
+    @Test
+    void loginSuccessWithoutSavedRequestRedirectsToFrontendEntryPoint() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         MockHttpServletResponse response = new MockHttpServletResponse();
         TestingAuthenticationToken authentication = new TestingAuthenticationToken("user", "password");
