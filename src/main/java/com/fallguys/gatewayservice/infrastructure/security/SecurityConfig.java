@@ -27,6 +27,7 @@ import org.springframework.security.web.authentication.SavedRequestAwareAuthenti
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
 import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
+import org.springframework.security.web.savedrequest.NullRequestCache;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -107,7 +108,7 @@ public class SecurityConfig {
 
                 // OAuth2 Login 세션 흐름에서 authorized client 저장소를 사용할 수 있게 한다.
                 .oauth2Client(Customizer.withDefaults())
-
+                .requestCache(cache -> cache.requestCache(new NullRequestCache()))
                 // API 요청은 XHR이 Keycloak redirect를 따라가지 않도록 401로 끝낸다.
                 .exceptionHandling(exception -> exception
                         .defaultAuthenticationEntryPointFor(
@@ -186,6 +187,8 @@ public class SecurityConfig {
         SavedRequestAwareAuthenticationSuccessHandler successHandler = new SavedRequestAwareAuthenticationSuccessHandler();
         successHandler.setRequestCache(new HttpSessionRequestCache());
         successHandler.setDefaultTargetUrl(frontendBaseUrl);
+        successHandler.setAlwaysUseDefaultTargetUrl(true);
+
         return (request, response, authentication) -> {
             String passwordChangeTarget = (String) request.getSession()
                     .getAttribute(AuthController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE);
