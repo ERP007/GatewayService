@@ -29,10 +29,9 @@ pipeline {
 
         stage('Health Check') {
             steps {
-                sh """
-                    sleep 5
-                    curl -f ${HEALTH_URL}
-                """
+                sh '''
+                    curl -fsS --retry 10 --retry-delay 3 --max-time 10 "$HEALTH_URL" >/dev/null
+                '''
             }
         }
     }
