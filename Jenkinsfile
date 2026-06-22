@@ -12,7 +12,7 @@ pipeline {
         COMPOSE_SERVICE = 'gateway-service'
         REGISTRY_HOST = 'registry.erp007.xyz'
         HARBOR_PROJECT = 'erp007'
-        HEALTH_URL = 'https://api.erp007.xyz/api/gateway/health'
+        HEALTH_URL = 'https://erp007.xyz/api/gateway/health'
     }
 
     stages {
