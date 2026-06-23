@@ -20,6 +20,7 @@ import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequest
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -140,6 +141,8 @@ class SecurityFlowTests {
         oauth2AuthenticationSuccessHandler.onAuthenticationSuccess(request, response, authentication);
 
         assertThat(response.getRedirectedUrl()).isEqualTo(FRONTEND_BASE_URL);
+        assertThat(request.getSession().getAttribute(FindByIndexNameSessionRepository.PRINCIPAL_NAME_INDEX_NAME))
+                .isEqualTo("user");
     }
 
     @Test
@@ -169,12 +172,14 @@ class SecurityFlowTests {
                         .session(session)
                         .cookie(
                                 new Cookie("JSESSIONID", "gateway-session"),
+                                new Cookie("GATEWAY_SESSION", "gateway-spring-session"),
                                 new Cookie("SESSION", "spring-session")
                         )
                         .with(oidcLogin()))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl(FRONTEND_BASE_URL))
                 .andExpect(cookie().maxAge("JSESSIONID", 0))
+                .andExpect(cookie().maxAge("GATEWAY_SESSION", 0))
                 .andExpect(cookie().maxAge("SESSION", 0));
 
         assertThat(session.isInvalid()).isTrue();
