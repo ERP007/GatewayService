@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.rabbit.core.ChannelCallback;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.support.RabbitExceptionTranslator;
 import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 
@@ -109,13 +110,18 @@ class UserAuthorityChangedDlqRedriveServiceTests {
                 .waitForConfirmsOrDie(5_000);
         when(rabbitTemplate.execute(any())).thenAnswer(invocation -> {
             ChannelCallback<Boolean> callback = invocation.getArgument(0);
-            return callback.doInRabbit(channel);
+            try {
+                return callback.doInRabbit(channel);
+            } catch (Exception ex) {
+                throw RabbitExceptionTranslator.convertRabbitAccessException(ex);
+            }
         });
         UserAuthorityChangedDlqRedriveService service =
                 new UserAuthorityChangedDlqRedriveService(rabbitTemplate, redisConnectionFactory, properties());
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.redrive(10))
-                .isInstanceOf(IOException.class);
+                .isInstanceOf(RuntimeException.class)
+                .hasCauseInstanceOf(IOException.class);
 
         verify(channel).basicPublish(
                 eq("erp.events"),
