@@ -38,7 +38,11 @@ public class UserAuthorityChangedEventListener {
         logPayloadIfEnabled(event);
         String keycloakSub = event == null ? null : event.keycloakSub();
         if (keycloakSub == null || keycloakSub.isBlank()) {
-            log.warn("Ignored user authority changed event without keycloakSub. event={}", event);
+            log.warn(
+                    "Ignored user authority changed event without keycloakSub. eventId={}, correlationId={}",
+                    event == null ? null : event.eventId(),
+                    event == null ? null : event.correlationId()
+            );
             channel.basicAck(deliveryTag, false);
             return;
         }
