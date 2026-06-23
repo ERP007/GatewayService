@@ -30,6 +30,7 @@ app:
         enabled: ${SESSION_INVALIDATION_DLQ_REDRIVE_ENABLED:true}
         fixed-delay-ms: ${SESSION_INVALIDATION_DLQ_REDRIVE_FIXED_DELAY_MS:60000}
         batch-size: ${SESSION_INVALIDATION_DLQ_REDRIVE_BATCH_SIZE:10}
+        max-attempts: ${SESSION_INVALIDATION_DLQ_REDRIVE_MAX_ATTEMPTS:3}
   debug:
     oauth2-token-enabled: ${OAUTH2_TOKEN_DEBUG_ENABLED:false}
     oauth2-token-include-values: ${OAUTH2_TOKEN_DEBUG_INCLUDE_VALUES:false}

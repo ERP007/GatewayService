@@ -29,7 +29,8 @@ public record SessionInvalidationMessagingProperties(
     public record DlqRedrive(
             boolean enabled,
             @Positive long fixedDelayMs,
-            @Positive int batchSize
+            @Positive int batchSize,
+            @Positive int maxAttempts
     ) {
     }
 }

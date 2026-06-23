@@ -56,6 +56,17 @@ public class UserAuthorityChangedDlqRedriveService {
             }
 
             long deliveryTag = response.getEnvelope().getDeliveryTag();
+            if (isRedriveLimitExceeded(response.getProps())) {
+                channel.basicNack(deliveryTag, false, true);
+                log.error(
+                        "Skipped Gateway session invalidation DLQ redrive because max redrive attempts were reached. queue={}, redriveCount={}, maxAttempts={}",
+                        properties.deadLetterQueue(),
+                        redriveCount(response.getProps()),
+                        properties.dlqRedrive().maxAttempts()
+                );
+                return false;
+            }
+
             try {
                 publishAndWaitForConfirm(channel, response);
                 channel.basicAck(deliveryTag, false);
@@ -116,6 +127,17 @@ public class UserAuthorityChangedDlqRedriveService {
         return source.builder()
                 .headers(headers)
                 .build();
+    }
+
+    private boolean isRedriveLimitExceeded(AMQP.BasicProperties source) {
+        return redriveCount(source) >= properties.dlqRedrive().maxAttempts();
+    }
+
+    private int redriveCount(AMQP.BasicProperties source) {
+        if (source == null || source.getHeaders() == null) {
+            return 0;
+        }
+        return redriveCount(source.getHeaders());
     }
 
     private int redriveCount(Map<String, Object> headers) {

@@ -273,7 +273,7 @@ class UserAuthorityChangedEventListenerTests {
                 "gateway.session-invalidation.dlx",
                 "gateway.user-session-invalidation.dlq",
                 "user.authority.changed.gateway.dlq",
-                new SessionInvalidationMessagingProperties.DlqRedrive(true, 60_000, 10)
+                new SessionInvalidationMessagingProperties.DlqRedrive(true, 60_000, 10, 3)
         );
     }
 }
