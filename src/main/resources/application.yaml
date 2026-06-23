@@ -14,9 +14,22 @@ app:
   session-invalidation:
     messaging:
       enabled: ${SESSION_INVALIDATION_MESSAGING_ENABLED:true}
+      payload-logging-enabled: ${SESSION_INVALIDATION_PAYLOAD_LOGGING_ENABLED:false}
       exchange: ${SESSION_INVALIDATION_EXCHANGE:erp.events}
       queue: ${SESSION_INVALIDATION_QUEUE:gateway.user-session-invalidation.q}
       routing-key: ${SESSION_INVALIDATION_ROUTING_KEY:user.authority.changed.gateway}
+      retry-exchange: ${SESSION_INVALIDATION_RETRY_EXCHANGE:gateway.session-invalidation.retry}
+      retry-queue: ${SESSION_INVALIDATION_RETRY_QUEUE:gateway.user-session-invalidation.retry.q}
+      retry-routing-key: ${SESSION_INVALIDATION_RETRY_ROUTING_KEY:user.authority.changed.gateway.retry}
+      retry-delay-ms: ${SESSION_INVALIDATION_RETRY_DELAY_MS:30000}
+      max-retry-attempts: ${SESSION_INVALIDATION_MAX_RETRY_ATTEMPTS:5}
+      dead-letter-exchange: ${SESSION_INVALIDATION_DLX:gateway.session-invalidation.dlx}
+      dead-letter-queue: ${SESSION_INVALIDATION_DLQ:gateway.user-session-invalidation.dlq}
+      dead-letter-routing-key: ${SESSION_INVALIDATION_DLQ_ROUTING_KEY:user.authority.changed.gateway.dlq}
+      dlq-redrive:
+        enabled: ${SESSION_INVALIDATION_DLQ_REDRIVE_ENABLED:true}
+        fixed-delay-ms: ${SESSION_INVALIDATION_DLQ_REDRIVE_FIXED_DELAY_MS:60000}
+        batch-size: ${SESSION_INVALIDATION_DLQ_REDRIVE_BATCH_SIZE:10}
   debug:
     oauth2-token-enabled: ${OAUTH2_TOKEN_DEBUG_ENABLED:false}
     oauth2-token-include-values: ${OAUTH2_TOKEN_DEBUG_INCLUDE_VALUES:false}
