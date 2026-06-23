@@ -38,12 +38,14 @@ pipeline {
                         image_repo="${REGISTRY_HOST}/${HARBOR_PROJECT}/${COMPOSE_SERVICE}"
                         image_sha="${image_repo}:${git_sha}"
                         image_main="${image_repo}:main"
+                        docker_config="$(mktemp -d)"
+                        export DOCKER_CONFIG="$docker_config"
+                        trap 'docker logout "$REGISTRY_HOST" >/dev/null 2>&1 || true; rm -rf "$docker_config"' EXIT
 
                         printf '%s' "$HARBOR_PASSWORD" | docker login "$REGISTRY_HOST" -u "$HARBOR_USERNAME" --password-stdin
                         docker build -f "$SERVER_BASE/infra/docker/server-service.Dockerfile" -t "$image_sha" -t "$image_main" .
                         docker push "$image_sha"
                         docker push "$image_main"
-                        docker logout "$REGISTRY_HOST"
                     '''
                 }
             }
