@@ -1,11 +1,16 @@
 package com.fallguys.gatewayservice.infrastructure.messaging;
 
 import com.rabbitmq.client.AMQP;
+import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.GetResponse;
+import com.rabbitmq.client.Return;
+import com.rabbitmq.client.ReturnListener;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -17,6 +22,8 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 public class UserAuthorityChangedDlqRedriveService {
+
+    private static final long PUBLISH_CONFIRM_TIMEOUT_MS = 5_000;
 
     static final String REDRIVEN_AT_HEADER = "x-gateway-redriven-at";
     static final String REDRIVE_COUNT_HEADER = "x-gateway-redrive-count";
@@ -50,21 +57,51 @@ public class UserAuthorityChangedDlqRedriveService {
 
             long deliveryTag = response.getEnvelope().getDeliveryTag();
             try {
-                channel.basicPublish(
-                        properties.exchange(),
-                        properties.routingKey(),
-                        false,
-                        redriveProperties(response.getProps()),
-                        response.getBody()
-                );
+                publishAndWaitForConfirm(channel, response);
                 channel.basicAck(deliveryTag, false);
                 return true;
-            } catch (IOException | RuntimeException ex) {
+            } catch (IOException | RuntimeException | TimeoutException | InterruptedException ex) {
+                if (ex instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
                 channel.basicNack(deliveryTag, false, true);
                 throw ex;
             }
         });
         return Boolean.TRUE.equals(redriven);
+    }
+
+    private void publishAndWaitForConfirm(Channel channel, GetResponse response)
+            throws IOException, TimeoutException, InterruptedException {
+        AtomicReference<Return> returnedMessage = new AtomicReference<>();
+        ReturnListener returnListener = channel.addReturnListener(returnedMessage::set);
+        try {
+            channel.confirmSelect();
+            channel.basicPublish(
+                    properties.exchange(),
+                    properties.routingKey(),
+                    true,
+                    redriveProperties(response.getProps()),
+                    response.getBody()
+            );
+            channel.waitForConfirmsOrDie(PUBLISH_CONFIRM_TIMEOUT_MS);
+
+            Return returned = returnedMessage.get();
+            if (returned != null) {
+                throw new IOException("Redriven message was returned by RabbitMQ. replyCode="
+                        + returned.getReplyCode()
+                        + ", replyText="
+                        + returned.getReplyText()
+                        + ", exchange="
+                        + returned.getExchange()
+                        + ", routingKey="
+                        + returned.getRoutingKey());
+            }
+        } finally {
+            if (returnListener != null) {
+                channel.removeReturnListener(returnListener);
+            }
+        }
     }
 
     private AMQP.BasicProperties redriveProperties(AMQP.BasicProperties source) {

@@ -4,6 +4,9 @@ import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Envelope;
 import com.rabbitmq.client.GetResponse;
+import com.rabbitmq.client.ReturnCallback;
+import com.rabbitmq.client.ReturnListener;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
@@ -18,6 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -30,6 +34,7 @@ class UserAuthorityChangedDlqRedriveServiceTests {
         RedisConnectionFactory redisConnectionFactory = mock(RedisConnectionFactory.class);
         RedisConnection redisConnection = mock(RedisConnection.class);
         Channel channel = mock(Channel.class);
+        ReturnListener returnListener = mock(ReturnListener.class);
         byte[] body = "{}".getBytes(StandardCharsets.UTF_8);
         AMQP.BasicProperties sourceProperties = new AMQP.BasicProperties.Builder()
                 .contentType("application/json")
@@ -46,6 +51,7 @@ class UserAuthorityChangedDlqRedriveServiceTests {
         );
         when(redisConnectionFactory.getConnection()).thenReturn(redisConnection);
         when(redisConnection.ping()).thenReturn("PONG");
+        when(channel.addReturnListener(any(ReturnCallback.class))).thenReturn(returnListener);
         when(channel.basicGet("gateway.user-session-invalidation.dlq", false))
                 .thenReturn(response)
                 .thenReturn(null);
@@ -64,15 +70,60 @@ class UserAuthorityChangedDlqRedriveServiceTests {
         verify(channel).basicPublish(
                 eq("erp.events"),
                 eq("user.authority.changed.gateway"),
-                eq(false),
+                eq(true),
                 propertiesCaptor.capture(),
                 eq(body)
         );
+        verify(channel).confirmSelect();
+        verify(channel).waitForConfirmsOrDie(5_000);
         assertThat(propertiesCaptor.getValue().getHeaders())
                 .containsEntry(UserAuthorityChangedEventListener.RETRY_COUNT_HEADER, 0)
                 .containsEntry(UserAuthorityChangedDlqRedriveService.REDRIVE_COUNT_HEADER, 3)
                 .containsKey(UserAuthorityChangedDlqRedriveService.REDRIVEN_AT_HEADER);
         verify(channel).basicAck(101, false);
+        verify(channel).removeReturnListener(returnListener);
+    }
+
+    @Test
+    void redriveRequeuesDlqMessageWhenPublishConfirmFails() throws Exception {
+        RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
+        RedisConnectionFactory redisConnectionFactory = mock(RedisConnectionFactory.class);
+        RedisConnection redisConnection = mock(RedisConnection.class);
+        Channel channel = mock(Channel.class);
+        byte[] body = "{}".getBytes(StandardCharsets.UTF_8);
+        AMQP.BasicProperties sourceProperties = new AMQP.BasicProperties.Builder()
+                .contentType("application/json")
+                .build();
+        GetResponse response = new GetResponse(
+                new Envelope(101, false, "gateway.session-invalidation.dlx", "user.authority.changed.gateway.dlq"),
+                sourceProperties,
+                body,
+                0
+        );
+        when(redisConnectionFactory.getConnection()).thenReturn(redisConnection);
+        when(redisConnection.ping()).thenReturn("PONG");
+        when(channel.basicGet("gateway.user-session-invalidation.dlq", false)).thenReturn(response);
+        doThrow(new IOException("publish not confirmed"))
+                .when(channel)
+                .waitForConfirmsOrDie(5_000);
+        when(rabbitTemplate.execute(any())).thenAnswer(invocation -> {
+            ChannelCallback<Boolean> callback = invocation.getArgument(0);
+            return callback.doInRabbit(channel);
+        });
+        UserAuthorityChangedDlqRedriveService service =
+                new UserAuthorityChangedDlqRedriveService(rabbitTemplate, redisConnectionFactory, properties());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.redrive(10))
+                .isInstanceOf(IOException.class);
+
+        verify(channel).basicPublish(
+                eq("erp.events"),
+                eq("user.authority.changed.gateway"),
+                eq(true),
+                any(AMQP.BasicProperties.class),
+                eq(body)
+        );
+        verify(channel).basicNack(101, false, true);
     }
 
     @Test
