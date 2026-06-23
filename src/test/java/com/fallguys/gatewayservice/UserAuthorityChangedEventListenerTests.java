@@ -96,8 +96,14 @@ class UserAuthorityChangedEventListenerTests {
         doThrow(new IllegalStateException("redis timeout"))
                 .when(sessionInvalidationService)
                 .expireByPrincipalName("keycloak-sub-001");
+        Message originalMessage = message(3);
+        originalMessage.getMessageProperties()
+                .setHeader("__TypeId__", "com.fallguys.userservice.shared.infrastructure.messaging.UserAuthorityChangedMessage");
+        originalMessage.getMessageProperties().setHeader("x-death", "rabbitmq-managed");
+        originalMessage.getMessageProperties().setHeader("content-type", "application/json");
+        originalMessage.getMessageProperties().setHeader("x-gateway-redrive-count", 2);
 
-        listener.handle(event, message(3), channel);
+        listener.handle(event, originalMessage, channel);
 
         ArgumentCaptor<MessagePostProcessor> postProcessorCaptor =
                 ArgumentCaptor.forClass(MessagePostProcessor.class);
@@ -107,11 +113,20 @@ class UserAuthorityChangedEventListenerTests {
                 eq(event),
                 postProcessorCaptor.capture()
         );
-        Message retryMessage = postProcessorCaptor.getValue().postProcessMessage(message(10));
+        Message retryMessage = message(10);
+        retryMessage.getMessageProperties()
+                .setHeader("__TypeId__", "com.fallguys.gatewayservice.infrastructure.messaging.UserAuthorityChangedEvent");
+        postProcessorCaptor.getValue().postProcessMessage(retryMessage);
         assertThat((Integer) retryMessage.getMessageProperties()
                 .getHeader(UserAuthorityChangedEventListener.RETRY_COUNT_HEADER)).isEqualTo(1);
         assertThat((String) retryMessage.getMessageProperties()
                 .getHeader(UserAuthorityChangedEventListener.LAST_ERROR_HEADER)).isEqualTo("redis timeout");
+        assertThat((String) retryMessage.getMessageProperties().getHeader("__TypeId__"))
+                .isEqualTo("com.fallguys.gatewayservice.infrastructure.messaging.UserAuthorityChangedEvent");
+        assertThat((Object) retryMessage.getMessageProperties().getHeader("x-death")).isNull();
+        assertThat((Object) retryMessage.getMessageProperties().getHeader("content-type")).isNull();
+        assertThat((Integer) retryMessage.getMessageProperties().getHeader("x-gateway-redrive-count"))
+                .isEqualTo(2);
         verify(channel).basicAck(3, false);
     }
 

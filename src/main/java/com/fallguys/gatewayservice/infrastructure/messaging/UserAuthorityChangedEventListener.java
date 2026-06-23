@@ -18,6 +18,8 @@ import tools.jackson.databind.ObjectMapper;
 @RequiredArgsConstructor
 public class UserAuthorityChangedEventListener {
 
+    private static final String APPLICATION_HEADER_PREFIX = "x-gateway-";
+
     public static final String RETRY_COUNT_HEADER = "x-gateway-retry-count";
     public static final String LAST_ERROR_HEADER = "x-gateway-last-error";
     public static final String FAILED_AT_HEADER = "x-gateway-failed-at";
@@ -186,7 +188,9 @@ public class UserAuthorityChangedEventListener {
 
     private void copyHeaders(Message original, Message target) {
         for (Map.Entry<String, Object> entry : original.getMessageProperties().getHeaders().entrySet()) {
-            target.getMessageProperties().setHeader(entry.getKey(), entry.getValue());
+            if (entry.getKey().startsWith(APPLICATION_HEADER_PREFIX)) {
+                target.getMessageProperties().setHeader(entry.getKey(), entry.getValue());
+            }
         }
     }
 
