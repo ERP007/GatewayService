@@ -11,6 +11,12 @@ server:
 
 app:
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+  session-invalidation:
+    messaging:
+      enabled: ${SESSION_INVALIDATION_MESSAGING_ENABLED:true}
+      exchange: ${SESSION_INVALIDATION_EXCHANGE:erp.events}
+      queue: ${SESSION_INVALIDATION_QUEUE:gateway.user-session-invalidation.q}
+      routing-key: ${SESSION_INVALIDATION_ROUTING_KEY:user.authority.changed.gateway}
   debug:
     oauth2-token-enabled: ${OAUTH2_TOKEN_DEBUG_ENABLED:false}
     oauth2-token-include-values: ${OAUTH2_TOKEN_DEBUG_INCLUDE_VALUES:false}
@@ -23,6 +29,12 @@ spring:
 
   application:
     name: gateway-service
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
 
   data:
     redis:

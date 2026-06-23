@@ -30,6 +30,7 @@ import org.springframework.security.web.authentication.SimpleUrlAuthenticationFa
 import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
 import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 import org.springframework.security.web.savedrequest.NullRequestCache;
+import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -202,6 +203,13 @@ public class SecurityConfig {
         successHandler.setAlwaysUseDefaultTargetUrl(true);
 
         return (request, response, authentication) -> {
+            if (authentication != null && authentication.getName() != null && !authentication.getName().isBlank()) {
+                request.getSession().setAttribute(
+                        FindByIndexNameSessionRepository.PRINCIPAL_NAME_INDEX_NAME,
+                        authentication.getName()
+                );
+            }
+
             String passwordChangeTarget = (String) request.getSession()
                     .getAttribute(AuthController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE);
 
