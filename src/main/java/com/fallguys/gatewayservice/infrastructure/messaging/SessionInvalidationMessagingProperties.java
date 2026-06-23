@@ -1,5 +1,6 @@
 package com.fallguys.gatewayservice.infrastructure.messaging;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -22,7 +23,7 @@ public record SessionInvalidationMessagingProperties(
         @NotBlank String deadLetterExchange,
         @NotBlank String deadLetterQueue,
         @NotBlank String deadLetterRoutingKey,
-        @NotNull DlqRedrive dlqRedrive
+        @NotNull @Valid DlqRedrive dlqRedrive
 ) {
 
     public record DlqRedrive(
