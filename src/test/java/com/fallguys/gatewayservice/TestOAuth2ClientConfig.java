@@ -6,6 +6,10 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
+import org.springframework.session.FindByIndexNameSessionRepository;
+import org.springframework.session.Session;
+
+import static org.mockito.Mockito.mock;
 
 @TestConfiguration(proxyBeanMethods = false)
 class TestOAuth2ClientConfig {
@@ -27,5 +31,11 @@ class TestOAuth2ClientConfig {
                 .build();
 
         return new InMemoryClientRegistrationRepository(keycloak);
+    }
+
+    @Bean
+    @SuppressWarnings("unchecked")
+    FindByIndexNameSessionRepository<Session> sessionRepository() {
+        return mock(FindByIndexNameSessionRepository.class);
     }
 }

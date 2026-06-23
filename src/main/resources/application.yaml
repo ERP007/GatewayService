@@ -3,9 +3,11 @@ server:
   forward-headers-strategy: framework
   servlet:
     session:
+      timeout: ${SESSION_TIMEOUT:2h}
       cookie:
-        same-site: none
-        secure: true
+        name: ${SESSION_COOKIE_NAME:GATEWAY_SESSION}
+        same-site: ${SESSION_COOKIE_SAME_SITE:none}
+        secure: ${SESSION_COOKIE_SECURE:true}
 
 app:
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
@@ -21,6 +23,19 @@ spring:
 
   application:
     name: gateway-service
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+  session:
+    data:
+      redis:
+        repository-type: indexed
+        namespace: erp:gateway:session
+        flush-mode: on_save
 
   cloud:
     gateway:

@@ -17,7 +17,9 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.oauth2.client.oidc.web.logout.OidcClientInitiatedLogoutSuccessHandler;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
+import org.springframework.security.oauth2.client.web.HttpSessionOAuth2AuthorizedClientRepository;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
@@ -56,6 +58,11 @@ public class SecurityConfig {
             "/api/*/v3/api-docs/**"
     };
 
+    @Bean
+    OAuth2AuthorizedClientRepository oauth2AuthorizedClientRepository() {
+        return new HttpSessionOAuth2AuthorizedClientRepository();
+    }
+
     /*
      * OAuth2 Login 기반 세션 흐름을 조립한다.
      *
@@ -70,7 +77,9 @@ public class SecurityConfig {
             AuthenticationSuccessHandler oauth2AuthenticationSuccessHandler,
             AuthenticationFailureHandler oauth2AuthenticationFailureHandler,
             LogoutSuccessHandler oidcLogoutSuccessHandler,
-            OAuth2AuthorizationRequestResolver oauth2AuthorizationRequestResolver
+            OAuth2AuthorizationRequestResolver oauth2AuthorizationRequestResolver,
+            OAuth2AuthorizedClientRepository oauth2AuthorizedClientRepository,
+            @Value("${server.servlet.session.cookie.name:GATEWAY_SESSION}") String sessionCookieName
     ) throws Exception {
         http
                 .securityMatcher("/api/**", "/login/**", "/oauth2/**", "/error")
@@ -90,6 +99,7 @@ public class SecurityConfig {
 
                 // Keycloak 로그인 플로우. 커스텀 resolver/handler를 끼워 비밀번호 변경 AIA와 React 복귀를 처리한다.
                 .oauth2Login(oauth2 -> oauth2
+                        .authorizedClientRepository(oauth2AuthorizedClientRepository)
                         .authorizationEndpoint(authorization -> authorization
                                 .authorizationRequestResolver(oauth2AuthorizationRequestResolver)
                         )
@@ -103,11 +113,13 @@ public class SecurityConfig {
                         .logoutSuccessHandler(oidcLogoutSuccessHandler)
                         .invalidateHttpSession(true)
                         .clearAuthentication(true)
-                        .deleteCookies("JSESSIONID", "SESSION")
+                        .deleteCookies("JSESSIONID", "SESSION", sessionCookieName)
                 )
 
                 // OAuth2 Login 세션 흐름에서 authorized client 저장소를 사용할 수 있게 한다.
-                .oauth2Client(Customizer.withDefaults())
+                .oauth2Client(oauth2 -> oauth2
+                        .authorizedClientRepository(oauth2AuthorizedClientRepository)
+                )
                 .requestCache(cache -> cache.requestCache(new NullRequestCache()))
                 // API 요청은 XHR이 Keycloak redirect를 따라가지 않도록 401로 끝낸다.
                 .exceptionHandling(exception -> exception
