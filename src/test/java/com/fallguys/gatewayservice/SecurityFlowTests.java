@@ -49,6 +49,10 @@ class SecurityFlowTests {
     private static final String FRONTEND_BASE_URL = "https://frontend.erp007.xyz/app";
     private static final String APP_ORIGIN = "https://app.erp007.xyz";
     private static final String ADMIN_ORIGIN = "https://admin.erp007.xyz";
+    private static final String KEYCLOAK_LOGOUT_URL =
+            "https://auth.example.test/realms/master/protocol/openid-connect/logout"
+                    + "?client_id=erp-client"
+                    + "&post_logout_redirect_uri=" + FRONTEND_BASE_URL;
 
     @Autowired
     private MockMvc mockMvc;
@@ -124,6 +128,13 @@ class SecurityFlowTests {
     }
 
     @Test
+    void authLoginEndpointCanForceKeycloakLoginPrompt() throws Exception {
+        mockMvc.perform(get("/api/auth/login").queryParam("prompt", "login"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/oauth2/authorization/keycloak?prompt=login"));
+    }
+
+    @Test
     void unauthenticatedDebugTokenRequestReturnsUnauthorizedWithoutKeycloakRedirect() throws Exception {
         assertThat(applicationContext.getBeanNamesForType(OAuth2TokenDebugController.class)).isNotEmpty();
 
@@ -157,10 +168,10 @@ class SecurityFlowTests {
     }
 
     @Test
-    void logoutWithoutAuthenticationRedirectsToFrontendHome() throws Exception {
+    void logoutWithoutAuthenticationRedirectsToKeycloakLogout() throws Exception {
         mockMvc.perform(get("/api/auth/logout"))
                 .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl(FRONTEND_BASE_URL));
+                .andExpect(redirectedUrl(KEYCLOAK_LOGOUT_URL));
     }
 
     @Test
@@ -207,6 +218,19 @@ class SecurityFlowTests {
         assertThat(authorizationRequest).isNotNull();
         assertThat(authorizationRequest.getAdditionalParameters())
                 .containsEntry("kc_action", "UPDATE_PASSWORD");
+    }
+
+    @Test
+    void keycloakAuthorizationRequestIncludesLoginPrompt() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/oauth2/authorization/keycloak");
+        request.setServletPath("/oauth2/authorization/keycloak");
+        request.addParameter("prompt", "login");
+
+        OAuth2AuthorizationRequest authorizationRequest = oauth2AuthorizationRequestResolver.resolve(request);
+
+        assertThat(authorizationRequest).isNotNull();
+        assertThat(authorizationRequest.getAdditionalParameters())
+                .containsEntry("prompt", "login");
     }
 
     @Test

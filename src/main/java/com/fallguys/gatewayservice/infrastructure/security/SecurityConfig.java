@@ -15,6 +15,7 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.oauth2.client.oidc.web.logout.OidcClientInitiatedLogoutSuccessHandler;
+import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
 import org.springframework.security.oauth2.client.web.HttpSessionOAuth2AuthorizedClientRepository;
@@ -34,6 +35,7 @@ import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.util.*;
@@ -48,6 +50,11 @@ public class SecurityConfig {
 
     // Keycloak AIA(Application Initiated Action)로 비밀번호 변경 화면을 열 때 넘기는 action 값.
     private static final String UPDATE_PASSWORD_ACTION = "UPDATE_PASSWORD";
+
+    private static final String LOGIN_PROMPT = "login";
+
+    private static final String KEYCLOAK_REGISTRATION_ID = "keycloak";
+    private static final String END_SESSION_ENDPOINT_METADATA_KEY = "end_session_endpoint";
 
     // CORS 설정값이 비어 있을 때 로컬 React 개발 서버를 기본 허용 origin으로 사용한다.
     private static final String DEFAULT_FRONTEND_ORIGIN = "http://localhost:5173";
@@ -157,7 +164,8 @@ public class SecurityConfig {
      * 로그아웃 성공 후 처리.
      *
      * Spring의 OIDC logout handler가 Keycloak end_session_endpoint로 보낼 URL을 만든다.
-     * 인증 정보가 없으면 React 홈으로 돌려보내고, OIDC logout 실패는 성공 로그아웃과 구분되게 처리한다.
+     * 인증 정보가 없으면 id_token_hint 없이 Keycloak logout endpoint로 보내 SSO 쿠키 정리를 시도한다.
+     * OIDC logout 실패는 성공 로그아웃과 구분되게 처리한다.
      */
     @Bean
     public LogoutSuccessHandler oidcLogoutSuccessHandler(
@@ -170,7 +178,7 @@ public class SecurityConfig {
         logoutSuccessHandler.setDefaultTargetUrl(frontendBaseUrl);
         return (request, response, authentication) -> {
             if (authentication == null) {
-                response.sendRedirect(frontendBaseUrl);
+                response.sendRedirect(keycloakLogoutRedirectUrl(clientRegistrationRepository, frontendBaseUrl));
                 return;
             }
 
@@ -185,6 +193,36 @@ public class SecurityConfig {
                 throw new ServletException("OIDC logout failed after response was committed", e);
             }
         };
+    }
+
+    private String keycloakLogoutRedirectUrl(
+            ClientRegistrationRepository clientRegistrationRepository,
+            String frontendBaseUrl
+    ) {
+        ClientRegistration clientRegistration = clientRegistrationRepository.findByRegistrationId(KEYCLOAK_REGISTRATION_ID);
+        if (clientRegistration == null) {
+            return frontendBaseUrl;
+        }
+
+        Object endSessionEndpoint = clientRegistration.getProviderDetails()
+                .getConfigurationMetadata()
+                .get(END_SESSION_ENDPOINT_METADATA_KEY);
+
+        if (endSessionEndpoint == null || endSessionEndpoint.toString().isBlank()) {
+            return frontendBaseUrl;
+        }
+
+        try {
+            return UriComponentsBuilder.fromUriString(endSessionEndpoint.toString())
+                    .queryParam("client_id", clientRegistration.getClientId())
+                    .queryParam("post_logout_redirect_uri", frontendBaseUrl)
+                    .build()
+                    .encode()
+                    .toUriString();
+        } catch (IllegalArgumentException e) {
+            log.warn("Failed to build Keycloak logout redirect URL", e);
+            return frontendBaseUrl;
+        }
     }
 
     /*
@@ -253,8 +291,9 @@ public class SecurityConfig {
     /*
      * OAuth2 authorization request를 만들 때 한 번 가로채는 resolver.
      *
-     * /oauth2/authorization/keycloak?kc_action=UPDATE_PASSWORD 로 들어온 요청에
-     * kc_action을 Keycloak authorization request의 additional parameter로 실어 보낸다.
+     * /oauth2/authorization/keycloak?kc_action=UPDATE_PASSWORD 로 들어온 요청에는 kc_action을,
+     * /oauth2/authorization/keycloak?prompt=login 로 들어온 요청에는 prompt=login을
+     * Keycloak authorization request의 additional parameter로 실어 보낸다.
      */
     @Bean
     public OAuth2AuthorizationRequestResolver oauth2AuthorizationRequestResolver(
@@ -299,20 +338,32 @@ public class SecurityConfig {
         return source;
     }
 
-    // Keycloak 비밀번호 변경 AIA 요청일 때만 kc_action 파라미터를 OAuth2 요청에 추가한다.
+    // Keycloak 비밀번호 변경 AIA와 강제 재로그인 요청에 필요한 OAuth2 파라미터만 추가한다.
     private OAuth2AuthorizationRequest customizeAuthorizationRequest(
             OAuth2AuthorizationRequest authorizationRequest,
             HttpServletRequest request
     ) {
-        if (authorizationRequest == null || !UPDATE_PASSWORD_ACTION.equals(request.getParameter("kc_action"))) {
+        if (authorizationRequest == null) {
             return authorizationRequest;
         }
 
-        // Keycloak은 authorization request의 kc_action 파라미터를 보고 UPDATE_PASSWORD Required Action을 실행한다.
         Map<String, Object> additionalParameters = new LinkedHashMap<>(
                 authorizationRequest.getAdditionalParameters()
         );
-        additionalParameters.put("kc_action", UPDATE_PASSWORD_ACTION);
+
+        if (UPDATE_PASSWORD_ACTION.equals(request.getParameter("kc_action"))) {
+            // Keycloak은 authorization request의 kc_action 파라미터를 보고 UPDATE_PASSWORD Required Action을 실행한다.
+            additionalParameters.put("kc_action", UPDATE_PASSWORD_ACTION);
+        }
+
+        if (LOGIN_PROMPT.equals(request.getParameter("prompt"))) {
+            // SSO 쿠키가 살아 있어도 이 authorization request에서는 사용자가 다시 인증하게 한다.
+            additionalParameters.put("prompt", LOGIN_PROMPT);
+        }
+
+        if (additionalParameters.equals(authorizationRequest.getAdditionalParameters())) {
+            return authorizationRequest;
+        }
 
         return OAuth2AuthorizationRequest.from(authorizationRequest)
                 .additionalParameters(additionalParameters)
