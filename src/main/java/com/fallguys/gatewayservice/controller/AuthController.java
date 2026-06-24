@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @Controller
 @RequestMapping("/api/auth")
@@ -19,7 +20,11 @@ public class AuthController {
     }
 
     @GetMapping("/login")
-    public String login() {
+    public String login(@RequestParam(name = "prompt", required = false) String prompt) {
+        if ("login".equals(prompt)) {
+            return "redirect:/oauth2/authorization/keycloak?prompt=login";
+        }
+
         return "redirect:/oauth2/authorization/keycloak";
     }
 
