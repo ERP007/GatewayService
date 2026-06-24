@@ -9,6 +9,8 @@ import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.session.Session;
 
+import java.util.Map;
+
 import static org.mockito.Mockito.mock;
 
 @TestConfiguration(proxyBeanMethods = false)
@@ -28,6 +30,10 @@ class TestOAuth2ClientConfig {
                 .jwkSetUri("https://auth.example.test/realms/master/protocol/openid-connect/certs")
                 .userInfoUri("https://auth.example.test/realms/master/protocol/openid-connect/userinfo")
                 .userNameAttributeName("sub")
+                .providerConfigurationMetadata(Map.of(
+                        "end_session_endpoint",
+                        "https://auth.example.test/realms/master/protocol/openid-connect/logout"
+                ))
                 .build();
 
         return new InMemoryClientRegistrationRepository(keycloak);
