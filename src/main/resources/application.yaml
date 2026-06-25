@@ -11,6 +11,18 @@ server:
 
 app:
   frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+  demo-switch:
+    enabled: ${DEMO_SWITCH_ENABLED:false}
+    accounts:
+      ADMIN:
+        username: ${DEMO_SWITCH_ADMIN_USERNAME:}
+        password: ${DEMO_SWITCH_ADMIN_PASSWORD:}
+      HQ001:
+        username: ${DEMO_SWITCH_HQ001_USERNAME:}
+        password: ${DEMO_SWITCH_HQ001_PASSWORD:}
+      BR001:
+        username: ${DEMO_SWITCH_BR001_USERNAME:}
+        password: ${DEMO_SWITCH_BR001_PASSWORD:}
   session-invalidation:
     messaging:
       enabled: ${SESSION_INVALIDATION_MESSAGING_ENABLED:true}
