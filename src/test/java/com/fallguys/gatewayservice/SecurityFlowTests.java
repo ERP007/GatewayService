@@ -14,6 +14,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
@@ -31,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.oidcLogin;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
@@ -39,6 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties = {
         "eureka.client.enabled=false",
         "app.frontend-base-url=https://frontend.erp007.xyz/app",
+        "app.demo-switch.enabled=false",
         "app.debug.oauth2-token-enabled=true",
         "app.cors.allowed-origins=https://app.erp007.xyz,https://admin.erp007.xyz/admin"
 })
@@ -141,6 +144,17 @@ class SecurityFlowTests {
         mockMvc.perform(get("/api/debug/oauth2-token"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(result -> assertThat(result.getResponse().getRedirectedUrl()).isNull());
+    }
+
+    @Test
+    void disabledDemoSwitchEndpointReturnsNotFound() throws Exception {
+        mockMvc.perform(post("/api/auth/demo/switch-account")
+                        .with(user("admin").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"employeeNo":"BR001"}
+                                """))
+                .andExpect(status().isNotFound());
     }
 
     @Test
