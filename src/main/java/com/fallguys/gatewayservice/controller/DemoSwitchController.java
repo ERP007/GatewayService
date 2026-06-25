@@ -11,6 +11,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -27,6 +28,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequiredArgsConstructor
+@Slf4j
 @RequestMapping("/api/auth/demo")
 public class DemoSwitchController {
 
@@ -94,6 +96,12 @@ public class DemoSwitchController {
         if (authentication == null || !authentication.isAuthenticated()) {
             return false;
         }
+
+        log.info(
+                "Demo switch authentication name={}, authorities={}",
+                authentication.getName(),
+                authentication.getAuthorities()
+        );
 
         Set<String> authorities = authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
