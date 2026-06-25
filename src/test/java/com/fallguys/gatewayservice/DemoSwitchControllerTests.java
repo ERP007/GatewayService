@@ -1,6 +1,7 @@
 package com.fallguys.gatewayservice;
 
 import com.fallguys.gatewayservice.infrastructure.security.DemoSwitchProperties;
+import com.fallguys.gatewayservice.infrastructure.security.DemoSwitchSessionService;
 import com.fallguys.gatewayservice.infrastructure.security.DemoSwitchTokenClient;
 import com.fallguys.gatewayservice.infrastructure.security.DemoSwitchTokenException;
 import com.fallguys.gatewayservice.infrastructure.security.DemoSwitchTokenResponse;
@@ -55,9 +56,13 @@ class DemoSwitchControllerTests {
     @Autowired
     private DemoSwitchTokenClient demoSwitchTokenClient;
 
+    @Autowired
+    private DemoSwitchSessionService demoSwitchSessionService;
+
     @BeforeEach
     void setUp() {
         reset(demoSwitchTokenClient);
+        reset(demoSwitchSessionService);
         when(demoSwitchTokenClient.issueToken(any())).thenReturn(new DemoSwitchTokenResponse(
                 "keycloak",
                 "access-token",
@@ -68,6 +73,7 @@ class DemoSwitchControllerTests {
                 ACCESS_TOKEN_EXPIRES_AT,
                 Set.of("openid", "profile", "email")
         ));
+        when(demoSwitchSessionService.replaceSession(any(), any(), any())).thenReturn("target-sub");
     }
 
     @Test
@@ -144,6 +150,7 @@ class DemoSwitchControllerTests {
                 .andExpect(jsonPath("$.accessTokenExpiresAt").value("2026-06-25T09:30:00Z"));
 
         verify(demoSwitchTokenClient).issueToken(new DemoSwitchProperties.Account("br001", "br-password"));
+        verify(demoSwitchSessionService).replaceSession(any(), any(), any());
     }
 
     @Test
@@ -168,6 +175,12 @@ class DemoSwitchControllerTests {
         @Primary
         DemoSwitchTokenClient demoSwitchTokenClient() {
             return mock(DemoSwitchTokenClient.class);
+        }
+
+        @Bean
+        @Primary
+        DemoSwitchSessionService demoSwitchSessionService() {
+            return mock(DemoSwitchSessionService.class);
         }
     }
 }

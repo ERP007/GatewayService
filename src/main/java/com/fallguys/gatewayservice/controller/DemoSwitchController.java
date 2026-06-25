@@ -3,9 +3,12 @@ package com.fallguys.gatewayservice.controller;
 import com.fallguys.gatewayservice.controller.dto.DemoSwitchAccountRequest;
 import com.fallguys.gatewayservice.controller.dto.DemoSwitchAccountResponse;
 import com.fallguys.gatewayservice.infrastructure.security.DemoSwitchProperties;
+import com.fallguys.gatewayservice.infrastructure.security.DemoSwitchSessionService;
 import com.fallguys.gatewayservice.infrastructure.security.DemoSwitchTokenClient;
 import com.fallguys.gatewayservice.infrastructure.security.DemoSwitchTokenException;
 import com.fallguys.gatewayservice.infrastructure.security.DemoSwitchTokenResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -37,11 +40,14 @@ public class DemoSwitchController {
 
     private final DemoSwitchProperties demoSwitchProperties;
     private final DemoSwitchTokenClient demoSwitchTokenClient;
+    private final DemoSwitchSessionService demoSwitchSessionService;
 
     @PostMapping("/switch-account")
     public ResponseEntity<DemoSwitchAccountResponse> switchAccount(
             @Valid @RequestBody DemoSwitchAccountRequest request,
-            Authentication authentication
+            Authentication authentication,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse
     ) {
         if (!demoSwitchProperties.enabled()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND);
@@ -55,6 +61,7 @@ public class DemoSwitchController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
 
         DemoSwitchTokenResponse tokenResponse = issueToken(account);
+        replaceSession(tokenResponse, httpRequest, httpResponse);
 
         return ResponseEntity.ok(new DemoSwitchAccountResponse(
                 employeeNo,
@@ -68,6 +75,18 @@ public class DemoSwitchController {
             return demoSwitchTokenClient.issueToken(account);
         } catch (DemoSwitchTokenException e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Failed to issue demo account token.", e);
+        }
+    }
+
+    private void replaceSession(
+            DemoSwitchTokenResponse tokenResponse,
+            HttpServletRequest request,
+            HttpServletResponse response
+    ) {
+        try {
+            demoSwitchSessionService.replaceSession(tokenResponse, request, response);
+        } catch (DemoSwitchTokenException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Failed to switch demo account session.", e);
         }
     }
 
