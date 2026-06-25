@@ -3,6 +3,9 @@ package com.fallguys.gatewayservice.controller;
 import com.fallguys.gatewayservice.controller.dto.DemoSwitchAccountRequest;
 import com.fallguys.gatewayservice.controller.dto.DemoSwitchAccountResponse;
 import com.fallguys.gatewayservice.infrastructure.security.DemoSwitchProperties;
+import com.fallguys.gatewayservice.infrastructure.security.DemoSwitchTokenClient;
+import com.fallguys.gatewayservice.infrastructure.security.DemoSwitchTokenException;
+import com.fallguys.gatewayservice.infrastructure.security.DemoSwitchTokenResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -33,6 +36,7 @@ public class DemoSwitchController {
     );
 
     private final DemoSwitchProperties demoSwitchProperties;
+    private final DemoSwitchTokenClient demoSwitchTokenClient;
 
     @PostMapping("/switch-account")
     public ResponseEntity<DemoSwitchAccountResponse> switchAccount(
@@ -50,7 +54,21 @@ public class DemoSwitchController {
         DemoSwitchProperties.Account account = demoSwitchProperties.findAccount(employeeNo)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
 
-        return ResponseEntity.ok(new DemoSwitchAccountResponse(employeeNo, account.username()));
+        DemoSwitchTokenResponse tokenResponse = issueToken(account);
+
+        return ResponseEntity.ok(new DemoSwitchAccountResponse(
+                employeeNo,
+                account.username(),
+                tokenResponse.accessTokenExpiresAt()
+        ));
+    }
+
+    private DemoSwitchTokenResponse issueToken(DemoSwitchProperties.Account account) {
+        try {
+            return demoSwitchTokenClient.issueToken(account);
+        } catch (DemoSwitchTokenException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Failed to issue demo account token.", e);
+        }
     }
 
     private boolean canSwitchAccount(Authentication authentication) {
