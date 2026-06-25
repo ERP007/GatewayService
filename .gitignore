@@ -44,6 +44,3 @@ out/
 
 AGENTS.md
 CLAUDE.md
-src/main/resources/application-prod.yml
-
-src/main/resources/application.prod.yml
