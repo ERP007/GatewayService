@@ -82,13 +82,43 @@ class DemoSwitchTokenClientTests {
                 .andRespond(withSuccess("""
                         {
                           "access_token": "access-token-value",
-                          "expires_in": 300
+                          "expires_in": 300,
+                          "id_token": "id-token-value"
                         }
                         """, MediaType.APPLICATION_JSON));
 
         DemoSwitchTokenResponse response = client.issueToken(new DemoSwitchProperties.Account("br001", "secret"));
 
         assertThat(response.accessTokenValue()).isEqualTo("access-token-value");
+        assertThat(response.idTokenValue()).isEqualTo("id-token-value");
+        assertThat(response.scopes()).containsExactlyInAnyOrder("openid", "profile", "email");
+        server.verify();
+    }
+
+    @Test
+    void issueTokenAlwaysRequestsOpenIdScope() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
+        DemoSwitchTokenClient client = new DemoSwitchTokenClient(
+                new InMemoryClientRegistrationRepository(
+                        clientRegistration(ClientAuthenticationMethod.CLIENT_SECRET_BASIC, "profile", "email")
+                ),
+                restTemplate
+        );
+        server.expect(once(), requestTo("https://auth.example.test/realms/master/protocol/openid-connect/token"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(containsString("scope=openid+profile+email")))
+                .andRespond(withSuccess("""
+                        {
+                          "access_token": "access-token-value",
+                          "expires_in": 300,
+                          "id_token": "id-token-value"
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        DemoSwitchTokenResponse response = client.issueToken(new DemoSwitchProperties.Account("br001", "secret"));
+
+        assertThat(response.idTokenValue()).isEqualTo("id-token-value");
         assertThat(response.scopes()).containsExactlyInAnyOrder("openid", "profile", "email");
         server.verify();
     }
@@ -114,7 +144,33 @@ class DemoSwitchTokenClientTests {
         server.verify();
     }
 
+    @Test
+    void issueTokenRejectsMissingIdToken() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
+        DemoSwitchTokenClient client = new DemoSwitchTokenClient(
+                new InMemoryClientRegistrationRepository(clientRegistration(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)),
+                restTemplate
+        );
+        server.expect(once(), requestTo("https://auth.example.test/realms/master/protocol/openid-connect/token"))
+                .andRespond(withSuccess("""
+                        {
+                          "access_token": "access-token-value",
+                          "expires_in": 300
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.issueToken(new DemoSwitchProperties.Account("br001", "secret")))
+                .isInstanceOf(DemoSwitchTokenException.class)
+                .hasMessage("Keycloak token response is missing id_token.");
+        server.verify();
+    }
+
     private ClientRegistration clientRegistration(ClientAuthenticationMethod clientAuthenticationMethod) {
+        return clientRegistration(clientAuthenticationMethod, "openid", "profile", "email");
+    }
+
+    private ClientRegistration clientRegistration(ClientAuthenticationMethod clientAuthenticationMethod, String... scopes) {
         return ClientRegistration.withRegistrationId("keycloak")
                 .clientId("erp-client")
                 .clientSecret("test-secret")
@@ -122,7 +178,7 @@ class DemoSwitchTokenClientTests {
                 .clientName("keycloak")
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .redirectUri("{baseUrl}/login/oauth2/code/{registrationId}")
-                .scope("openid", "profile", "email")
+                .scope(scopes)
                 .authorizationUri("https://auth.example.test/realms/master/protocol/openid-connect/auth")
                 .tokenUri("https://auth.example.test/realms/master/protocol/openid-connect/token")
                 .jwkSetUri("https://auth.example.test/realms/master/protocol/openid-connect/certs")

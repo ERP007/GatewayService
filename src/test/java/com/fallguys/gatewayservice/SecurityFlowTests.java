@@ -2,6 +2,8 @@ package com.fallguys.gatewayservice;
 
 import com.fallguys.gatewayservice.controller.AuthController;
 import com.fallguys.gatewayservice.controller.OAuth2TokenDebugController;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.PlainJWT;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,7 +19,11 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
+import org.springframework.security.oauth2.core.oidc.OidcIdToken;
+import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
@@ -26,9 +32,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.oidcLogin;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -211,6 +220,26 @@ class SecurityFlowTests {
     }
 
     @Test
+    void logoutWithKeycloakOidcAuthenticationSendsIdTokenHint() throws Exception {
+        String idTokenValue = idTokenValue("target-sub");
+        MockHttpSession session = new MockHttpSession();
+        OAuth2AuthenticationToken keycloakAuthentication = keycloakOidcAuthentication(idTokenValue);
+
+        mockMvc.perform(get("/api/auth/logout")
+                        .session(session)
+                        .with(authentication(keycloakAuthentication)))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(result -> {
+                    String redirectedUrl = result.getResponse().getRedirectedUrl();
+                    assertThat(redirectedUrl)
+                            .startsWith("https://auth.example.test/realms/master/protocol/openid-connect/logout");
+                    assertThat(redirectedUrl).contains("id_token_hint=");
+                    assertThat(redirectedUrl).contains(idTokenValue);
+                    assertThat(redirectedUrl).contains("post_logout_redirect_uri=");
+                });
+    }
+
+    @Test
     void corsAllowedOriginsUseConfiguredCorsOrigins() {
         MockHttpServletRequest request = new MockHttpServletRequest("OPTIONS", "/api/users/session");
         request.addHeader("Origin", APP_ORIGIN);
@@ -284,5 +313,30 @@ class SecurityFlowTests {
         assertThat(request.getSession().getAttribute(
                 AuthController.PASSWORD_CHANGE_TARGET_SESSION_ATTRIBUTE
         )).isNull();
+    }
+
+    private OAuth2AuthenticationToken keycloakOidcAuthentication(String idTokenValue) {
+        Instant issuedAt = Instant.parse("2026-06-25T09:00:00Z");
+        OidcIdToken idToken = new OidcIdToken(
+                idTokenValue,
+                issuedAt,
+                issuedAt.plusSeconds(300),
+                Map.of("sub", "target-sub")
+        );
+        DefaultOidcUser principal = new DefaultOidcUser(
+                List.of(new SimpleGrantedAuthority("ROLE_ADMIN")),
+                idToken,
+                "sub"
+        );
+        return new OAuth2AuthenticationToken(principal, principal.getAuthorities(), "keycloak");
+    }
+
+    private String idTokenValue(String sub) {
+        Instant issuedAt = Instant.parse("2026-06-25T09:00:00Z");
+        return new PlainJWT(new JWTClaimsSet.Builder()
+                .subject(sub)
+                .issueTime(java.util.Date.from(issuedAt))
+                .expirationTime(java.util.Date.from(issuedAt.plusSeconds(300)))
+                .build()).serialize();
     }
 }

@@ -63,6 +63,10 @@ public class DemoSwitchController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
 
         DemoSwitchTokenResponse tokenResponse = issueToken(account);
+        log.info(
+                "Demo switch idToken present={}",
+                tokenResponse.idTokenValue() != null && !tokenResponse.idTokenValue().isBlank()
+        );
         replaceSession(tokenResponse, httpRequest, httpResponse);
 
         return ResponseEntity.ok(new DemoSwitchAccountResponse(

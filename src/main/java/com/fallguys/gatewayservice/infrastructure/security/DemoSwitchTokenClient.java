@@ -18,13 +18,16 @@ import org.springframework.web.client.RestOperations;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 @Component
 public class DemoSwitchTokenClient {
 
     private static final String KEYCLOAK_REGISTRATION_ID = "keycloak";
     private static final String PASSWORD_GRANT_TYPE = "password";
+    private static final String OPENID_SCOPE = "openid";
 
     private final ClientRegistrationRepository clientRegistrationRepository;
     private final RestOperations restOperations;
@@ -49,12 +52,13 @@ public class DemoSwitchTokenClient {
         }
 
         Instant issuedAt = Instant.now();
+        Set<String> requestedScopes = tokenRequestScopes(clientRegistration);
         ResponseEntity<Map<String, Object>> response;
         try {
             response = restOperations.exchange(
                     clientRegistration.getProviderDetails().getTokenUri(),
                     HttpMethod.POST,
-                    tokenRequest(clientRegistration, account),
+                    tokenRequest(clientRegistration, account, requestedScopes),
                     new ParameterizedTypeReference<>() {
                     }
             );
@@ -66,13 +70,14 @@ public class DemoSwitchTokenClient {
                 clientRegistration.getRegistrationId(),
                 response.getBody(),
                 issuedAt,
-                clientRegistration.getScopes()
+                requestedScopes
         );
     }
 
     private HttpEntity<MultiValueMap<String, String>> tokenRequest(
             ClientRegistration clientRegistration,
-            DemoSwitchProperties.Account account
+            DemoSwitchProperties.Account account,
+            Set<String> requestedScopes
     ) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
@@ -83,9 +88,7 @@ public class DemoSwitchTokenClient {
         form.add("client_id", clientRegistration.getClientId());
         form.add("username", account.username());
         form.add("password", account.password());
-        if (!clientRegistration.getScopes().isEmpty()) {
-            form.add("scope", String.join(" ", clientRegistration.getScopes()));
-        }
+        form.add("scope", String.join(" ", requestedScopes));
 
         String clientSecret = clientRegistration.getClientSecret();
         if (clientSecret != null && !clientSecret.isBlank()) {
@@ -99,5 +102,12 @@ public class DemoSwitchTokenClient {
         }
 
         return new HttpEntity<>(form, headers);
+    }
+
+    private Set<String> tokenRequestScopes(ClientRegistration clientRegistration) {
+        LinkedHashSet<String> scopes = new LinkedHashSet<>();
+        scopes.add(OPENID_SCOPE);
+        scopes.addAll(clientRegistration.getScopes());
+        return scopes;
     }
 }
