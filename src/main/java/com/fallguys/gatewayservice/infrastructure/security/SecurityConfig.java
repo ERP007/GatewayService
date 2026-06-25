@@ -12,6 +12,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -30,6 +33,7 @@ import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 import org.springframework.security.web.savedrequest.NullRequestCache;
 import org.springframework.session.FindByIndexNameSessionRepository;
@@ -235,7 +239,8 @@ public class SecurityConfig {
      */
     @Bean
     public AuthenticationSuccessHandler oauth2AuthenticationSuccessHandler(
-            @Value("${app.frontend-base-url}") String frontendBaseUrl
+            @Value("${app.frontend-base-url}") String frontendBaseUrl,
+            OAuth2LoginAuthorityService oauth2LoginAuthorityService
     ) {
         SavedRequestAwareAuthenticationSuccessHandler successHandler = new SavedRequestAwareAuthenticationSuccessHandler();
         successHandler.setRequestCache(new HttpSessionRequestCache());
@@ -243,10 +248,15 @@ public class SecurityConfig {
         successHandler.setAlwaysUseDefaultTargetUrl(true);
 
         return (request, response, authentication) -> {
-            if (authentication != null && authentication.getName() != null && !authentication.getName().isBlank()) {
+            Authentication effectiveAuthentication = oauth2LoginAuthorityService.enhance(authentication, request);
+            saveAuthentication(request, effectiveAuthentication);
+
+            if (effectiveAuthentication != null
+                    && effectiveAuthentication.getName() != null
+                    && !effectiveAuthentication.getName().isBlank()) {
                 request.getSession().setAttribute(
                         FindByIndexNameSessionRepository.PRINCIPAL_NAME_INDEX_NAME,
-                        authentication.getName()
+                        effectiveAuthentication.getName()
                 );
             }
 
@@ -260,8 +270,22 @@ public class SecurityConfig {
                 return;
             }
 
-            successHandler.onAuthenticationSuccess(request, response, authentication);
+            successHandler.onAuthenticationSuccess(request, response, effectiveAuthentication);
         };
+    }
+
+    private void saveAuthentication(HttpServletRequest request, Authentication authentication) {
+        if (authentication == null) {
+            return;
+        }
+
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(authentication);
+        SecurityContextHolder.setContext(securityContext);
+        request.getSession().setAttribute(
+                HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
+                securityContext
+        );
     }
 
     /*
