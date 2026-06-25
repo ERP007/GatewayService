@@ -73,6 +73,8 @@ class DemoSwitchSessionServiceTests {
         OAuth2AuthenticationToken authentication = (OAuth2AuthenticationToken) securityContext.getAuthentication();
         assertThat(authentication.getName()).isEqualTo("target-sub");
         assertThat(authentication.getPrincipal()).isInstanceOf(OidcUser.class);
+        OidcUser oidcUser = (OidcUser) authentication.getPrincipal();
+        assertThat(oidcUser.getIdToken().getTokenValue()).isEqualTo(tokenResponse.idTokenValue());
         assertThat(authentication.getAuthorities())
                 .extracting("authority")
                 .contains("ROLE_BRANCH_MANAGER", "BRANCH_MANAGER", "SCOPE_openid");
@@ -95,6 +97,17 @@ class DemoSwitchSessionServiceTests {
         assertThatThrownBy(() -> service.replaceSession(tokenResponse, request, response))
                 .isInstanceOf(DemoSwitchTokenException.class)
                 .hasMessage("Demo switch token is missing sub claim.");
+    }
+
+    @Test
+    void replaceSessionRejectsMissingIdToken() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        DemoSwitchTokenResponse tokenResponse = tokenResponse(accessToken("target-sub", "BRANCH_MANAGER"), null);
+
+        assertThatThrownBy(() -> service.replaceSession(tokenResponse, request, response))
+                .isInstanceOf(DemoSwitchTokenException.class)
+                .hasMessage("Demo switch token response is missing id_token.");
     }
 
     private DemoSwitchTokenResponse tokenResponse(String accessTokenValue, String idTokenValue) {

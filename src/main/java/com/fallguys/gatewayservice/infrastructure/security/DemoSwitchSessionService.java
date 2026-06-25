@@ -19,9 +19,7 @@ import org.springframework.security.oauth2.core.OAuth2RefreshToken;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
-import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.oauth2.core.user.OAuth2User;
-import org.springframework.security.oauth2.core.user.OAuth2UserAuthority;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.stereotype.Service;
@@ -129,13 +127,10 @@ public class DemoSwitchSessionService {
             Collection<GrantedAuthority> authorities
     ) {
         String userNameAttributeName = userNameAttributeName(clientRegistration);
-        if (tokenResponse.idTokenValue() == null || tokenResponse.idTokenValue().isBlank()) {
-            return new DefaultOAuth2User(authorities, accessTokenClaims, userNameAttributeName);
-        }
-
-        Map<String, Object> idTokenClaims = jwtClaims(tokenResponse.idTokenValue(), "id_token");
+        String idTokenValue = requiredIdTokenValue(tokenResponse);
+        Map<String, Object> idTokenClaims = jwtClaims(idTokenValue, "id_token");
         OidcIdToken idToken = new OidcIdToken(
-                tokenResponse.idTokenValue(),
+                idTokenValue,
                 instantClaim(idTokenClaims, "iat", tokenResponse.issuedAt()),
                 instantClaim(idTokenClaims, "exp", tokenResponse.accessTokenExpiresAt()),
                 idTokenClaims
@@ -147,19 +142,15 @@ public class DemoSwitchSessionService {
             DemoSwitchTokenResponse tokenResponse,
             Map<String, Object> accessTokenClaims
     ) {
-        Map<String, Object> attributes = new LinkedHashMap<>(accessTokenClaims);
         List<GrantedAuthority> authorities = new ArrayList<>();
-        if (tokenResponse.idTokenValue() == null || tokenResponse.idTokenValue().isBlank()) {
-            authorities.add(new OAuth2UserAuthority(attributes));
-        } else {
-            OidcIdToken idToken = new OidcIdToken(
-                    tokenResponse.idTokenValue(),
-                    tokenResponse.issuedAt(),
-                    tokenResponse.accessTokenExpiresAt(),
-                    jwtClaims(tokenResponse.idTokenValue(), "id_token")
-            );
-            authorities.add(new OidcUserAuthority(idToken));
-        }
+        String idTokenValue = requiredIdTokenValue(tokenResponse);
+        OidcIdToken idToken = new OidcIdToken(
+                idTokenValue,
+                tokenResponse.issuedAt(),
+                tokenResponse.accessTokenExpiresAt(),
+                jwtClaims(idTokenValue, "id_token")
+        );
+        authorities.add(new OidcUserAuthority(idToken));
 
         for (String scope : tokenResponse.scopes()) {
             authorities.add(new SimpleGrantedAuthority("SCOPE_" + scope));
@@ -172,6 +163,13 @@ public class DemoSwitchSessionService {
         }
 
         return authorities;
+    }
+
+    private String requiredIdTokenValue(DemoSwitchTokenResponse tokenResponse) {
+        if (tokenResponse.idTokenValue() == null || tokenResponse.idTokenValue().isBlank()) {
+            throw new DemoSwitchTokenException("Demo switch token response is missing id_token.");
+        }
+        return tokenResponse.idTokenValue();
     }
 
     private String userNameAttributeName(ClientRegistration clientRegistration) {

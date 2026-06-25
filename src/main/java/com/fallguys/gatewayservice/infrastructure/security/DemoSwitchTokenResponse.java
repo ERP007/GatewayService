@@ -28,13 +28,14 @@ public record DemoSwitchTokenResponse(
         }
 
         String accessTokenValue = requiredString(response, "access_token");
+        String idTokenValue = requiredString(response, "id_token");
         long expiresIn = requiredPositiveLong(response, "expires_in");
 
         return new DemoSwitchTokenResponse(
                 clientRegistrationId,
                 accessTokenValue,
                 stringValue(response, "refresh_token"),
-                stringValue(response, "id_token"),
+                idTokenValue,
                 stringValue(response, "token_type", "Bearer"),
                 issuedAt,
                 issuedAt.plusSeconds(expiresIn),
